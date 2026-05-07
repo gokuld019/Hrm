@@ -12,7 +12,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL;
 const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
 
 const getAuthHeaders = () => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = typeof window !== "undefined" ? localStorage.getItem("admin_auth_token") : null;
   return {
     "Content-Type": "application/json",
     Accept: "application/json",

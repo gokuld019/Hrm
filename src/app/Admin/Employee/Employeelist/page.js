@@ -44,7 +44,7 @@ const PRIORITY_CFG = {
 
 // ── Auth headers ──────────────────────────────────────────────────────
 const getAuthHeaders = () => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = typeof window !== "undefined" ? localStorage.getItem("admin_auth_token") : null;
   return {
     "Content-Type": "application/json",
     Accept: "application/json",

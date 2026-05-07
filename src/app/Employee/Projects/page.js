@@ -22,7 +22,7 @@ const getTheme = () => _theme;
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
-  "Authorization": `Bearer ${localStorage.getItem("auth_token")}`,
+  "Authorization": `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
   "Accept": "application/json",
   "Content-Type": "application/json",
@@ -135,16 +135,15 @@ const Avatar = ({ name = "?", size = 32, color = "#374151", img = null }) => {
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   if (img) {
     return (
-      <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid #fff" }}>
-        <img src={img} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          onError={e => { e.target.style.display = "none"; }} />
-      </div>
+      React.createElement("div", { style: { width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid #fff" } },
+        React.createElement("img", { src: img, alt: name, style: { width: "100%", height: "100%", objectFit: "cover" }, onError: e => { e.target.style.display = "none"; } })
+      )
     );
   }
   return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.32, fontWeight: 700, color: "#fff", flexShrink: 0, letterSpacing: "-0.5px", border: "2px solid #fff" }}>
-      {initials}
-    </div>
+    React.createElement("div", { style: { width: size, height: size, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.32, fontWeight: 700, color: "#fff", flexShrink: 0, letterSpacing: "-0.5px", border: "2px solid #fff" } },
+      initials
+    )
   );
 };
 
@@ -152,22 +151,17 @@ function StackedAvatars({ members = [], max = 3, size = 26 }) {
   const shown = members.slice(0, max);
   const extra = members.length - max;
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      {shown.map((m, i) => {
+    React.createElement("div", { style: { display: "flex", alignItems: "center" } },
+      shown.map((m, i) => {
         const name = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim();
-        return (
-          <div key={m.id ?? i} title={name} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: max - i }}>
-            <Avatar name={name} size={size} color={avatarColor(name)}
-              img={m.profile_image ? `${m.profile_image}` : null} />
-          </div>
+        return React.createElement("div", { key: m.id ?? i, title: name, style: { marginLeft: i === 0 ? 0 : -8, zIndex: max - i } },
+          React.createElement(Avatar, { name: name, size: size, color: avatarColor(name), img: m.profile_image ? `${m.profile_image}` : null })
         );
-      })}
-      {extra > 0 && (
-        <div style={{ marginLeft: -8, width: size, height: size, borderRadius: "50%", background: "#e5e7eb", border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.28, fontWeight: 700, color: "#6b7280" }}>
-          +{extra}
-        </div>
-      )}
-    </div>
+      }),
+      extra > 0 && React.createElement("div", { style: { marginLeft: -8, width: size, height: size, borderRadius: "50%", background: "#e5e7eb", border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.28, fontWeight: 700, color: "#6b7280" } },
+        `+${extra}`
+      )
+    )
   );
 }
 
@@ -188,10 +182,10 @@ const STATUS_CONFIG = {
 function PriorityBadge({ priority }) {
   const cfg = PRIORITY_CONFIG[(priority ?? "").toLowerCase()] || PRIORITY_CONFIG.medium;
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, background: cfg.bg }}>
-      <div style={{ width: 7, height: 7, borderRadius: "50%", background: cfg.dot }} />
-      <span style={{ fontSize: 11.5, fontWeight: 600, color: cfg.text }}>{cfg.label}</span>
-    </div>
+    React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, background: cfg.bg } },
+      React.createElement("div", { style: { width: 7, height: 7, borderRadius: "50%", background: cfg.dot } }),
+      React.createElement("span", { style: { fontSize: 11.5, fontWeight: 600, color: cfg.text } }, cfg.label)
+    )
   );
 }
 
@@ -199,151 +193,10 @@ function StatusBadge({ status }) {
   const key = (status ?? "").toLowerCase().replace(" ", "-");
   const cfg = STATUS_CONFIG[key] || STATUS_CONFIG.planning;
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, background: cfg.bg }}>
-      <div style={{ width: 7, height: 7, borderRadius: "50%", background: cfg.dot }} />
-      <span style={{ fontSize: 11.5, fontWeight: 600, color: cfg.text }}>{cfg.label}</span>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SIDEBAR
-// ─────────────────────────────────────────────────────────────────────────────
-const subIconMap = {
-  ticketList:   ICONS.ticketList,
-  ticketDetail: ICONS.ticketDetail,
-  automation:   ICONS.automation,
-  reports:      ICONS.reports,
-};
-
-function AccordionNavItem({ label, iconKey = "tickets", subItems, activePage, onNavigate }) {
-  const ACCENT = getTheme().accent;
-  const isAnyChildActive = subItems.some(item => item.pageKey === activePage);
-  const [open, setOpen] = useState(isAnyChildActive);
-  useEffect(() => { if (isAnyChildActive) setOpen(true); }, [isAnyChildActive]);
-  return (
-    <div style={{ marginBottom: 2 }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "8px 12px 8px 10px", border: "none", borderRadius: 8, background: (open || isAnyChildActive) ? `${ACCENT}18` : "transparent", color: (open || isAnyChildActive) ? ACCENT : "#374151", cursor: "pointer", fontSize: 13.5, fontWeight: (open || isAnyChildActive) ? 600 : 500, textAlign: "left", transition: "background 0.15s, color 0.15s" }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: (open || isAnyChildActive) ? ACCENT : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
-          <Icon d={ICONS[iconKey] || ICONS.tickets} size={16} stroke={(open || isAnyChildActive) ? "#fff" : "#6b7280"} />
-        </div>
-        <span style={{ flex: 1 }}>{label}</span>
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={open ? ACCENT : "#9ca3af"} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
-          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-      {open && (
-        <div style={{ marginTop: 2, marginLeft: 20, paddingLeft: 16, borderLeft: "2px solid #e5e7eb" }}>
-          {subItems.map((item, i) => {
-            const isActive = activePage === item.pageKey;
-            return (
-              <button key={i} onClick={() => onNavigate(item.pageKey)}
-                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 10px", border: "none", borderRadius: 6, background: isActive ? `${ACCENT}15` : "transparent", color: isActive ? ACCENT : "#6b7280", cursor: "pointer", fontSize: 12.5, fontWeight: isActive ? 600 : 400, marginBottom: 1, textAlign: "left" }}
-                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "#f9fafb"; e.currentTarget.style.color = "#374151"; } }}
-                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; } }}>
-                <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: isActive ? `${ACCENT}15` : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon d={subIconMap[item.iconKey] || ICONS.ticketList} size={12} stroke={isActive ? ACCENT : "#9ca3af"} />
-                </div>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.badge && (
-                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "#ef4444", color: "#fff", fontWeight: 700 }}>{item.badge}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SideNavItem({ label, iconKey, pageKey, badge, activePage, onNavigate }) {
-  const ACCENT = getTheme().accent;
-  const isActive = activePage === pageKey;
-  return (
-    <button onClick={() => onNavigate(pageKey)}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "8px 12px 8px 10px", border: "none", borderRadius: 8, background: isActive ? `${ACCENT}18` : "transparent", color: isActive ? ACCENT : "#374151", cursor: "pointer", fontSize: 13.5, fontWeight: isActive ? 600 : 500, textAlign: "left", transition: "background 0.15s, color 0.15s", marginBottom: 2 }}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: isActive ? ACCENT : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
-        <Icon d={ICONS[iconKey] || ICONS.tickets} size={16} stroke={isActive ? "#fff" : "#6b7280"} />
-      </div>
-      <span style={{ flex: 1 }}>{label}</span>
-      {badge && (
-        <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 8, background: "#ef4444", color: "#fff", fontWeight: 700 }}>{badge}</span>
-      )}
-    </button>
-  );
-}
-
-function Sidebar({ activePage, onNavigate, fullName, designation }) {
-  const { theme } = useTheme();
-  const ACCENT = theme.accent;
-  return (
-    <aside style={{ width: 232, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh" }}>
-      <div style={{ padding: "15px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 9 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 9, background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, fontWeight: 800 }}>S</div>
-        <span style={{ fontSize: 16, fontWeight: 800, color: "#111827", letterSpacing: "-0.4px" }}>SmartHR</span>
-      </div>
-      <nav style={{ padding: "14px 10px", flex: 1, overflowY: "auto" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.9px", padding: "0 10px 8px" }}>HRM</div>
-        <SideNavItem label="Dashboard"   iconKey="home"   pageKey="dashboard" activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Projects"    iconKey="folder" pageKey="projects"  activePage={activePage} onNavigate={onNavigate} />
-        <AccordionNavItem label="Tickets" iconKey="tickets" activePage={activePage} onNavigate={onNavigate}
-          subItems={[
-            { label: "Ticket",            iconKey: "ticketList",   pageKey: "tickets"            },
-            { label: "Ticket Details",    iconKey: "ticketDetail", pageKey: "tickets-details"    },
-            { label: "Ticket Automation", iconKey: "automation",   pageKey: "tickets-automation" },
-            { label: "Ticket Reports",    iconKey: "reports",      pageKey: "tickets-reports"    },
-          ]}
-        />
-        <AccordionNavItem label="Attendance" iconKey="attendance" activePage={activePage} onNavigate={onNavigate}
-          subItems={[
-            { label: "Leaves",              iconKey: "ticketList", pageKey: "attendance-leaves"     },
-            { label: "Attendance",          iconKey: "ticketList", pageKey: "attendance-employee"   },
-            { label: "Timesheets",          iconKey: "reports",    pageKey: "attendance-timesheets" },
-            { label: "Shift & Schedule",    iconKey: "ticketList", pageKey: "attendance-shift"      },
-            { label: "Shift Swap Requests", iconKey: "automation", pageKey: "attendance-swap",  badge: "New" },
-            { label: "Overtime",            iconKey: "reports",    pageKey: "attendance-overtime"   },
-            { label: "Holiday Calendar",    iconKey: "ticketList", pageKey: "attendance-holidays",  badge: "New" },
-            { label: "WFH Management",      iconKey: "ticketList", pageKey: "attendance-wfh",       badge: "New" },
-          ]}
-        />
-        <AccordionNavItem label="Performance" iconKey="performance" activePage={activePage} onNavigate={onNavigate}
-          subItems={[
-            { label: "Performance Indicator", iconKey: "reports",      pageKey: "performance-indicator" },
-            { label: "Performance Review",    iconKey: "ticketDetail", pageKey: "performance-review"    },
-            { label: "Performance Appraisal", iconKey: "ticketDetail", pageKey: "performance-appraisal" },
-            { label: "Goal List",             iconKey: "ticketList",   pageKey: "performance-goal-list" },
-            { label: "Goal Type",             iconKey: "automation",   pageKey: "performance-goal-type" },
-          ]}
-        />
-        <AccordionNavItem label="Training" iconKey="training" activePage={activePage} onNavigate={onNavigate}
-          subItems={[
-            { label: "Training List",          iconKey: "ticketList",  pageKey: "training-list"      },
-            { label: "Trainers",               iconKey: "ticketDetail",pageKey: "training-trainers"  },
-            { label: "Training Type",          iconKey: "automation",  pageKey: "training-type"      },
-            { label: "Certification Tracking", iconKey: "ticketList",  pageKey: "training-cert",  badge: "New" },
-            { label: "Learning Analytics",     iconKey: "reports",     pageKey: "training-analytics", badge: "New" },
-          ]}
-        />
-        <SideNavItem label="Probation Management" iconKey="probation"   pageKey="probation"   badge="New" activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Notice Period Tracker" iconKey="notice"     pageKey="notice"      badge="New" activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Promotion"             iconKey="promotion"  pageKey="promotion"             activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Resignation"           iconKey="resignation"pageKey="resignation"           activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Termination"           iconKey="termination"pageKey="termination"           activePage={activePage} onNavigate={onNavigate} />
-        <SideNavItem label="Holidays"              iconKey="holidays"   pageKey="holidays"              activePage={activePage} onNavigate={onNavigate} />
-      </nav>
-      <div style={{ padding: "12px 14px", borderTop: "1px solid #f1f5f9" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <Avatar name={fullName || "Employee"} size={34} color="#374151" />
-          <div style={{ overflow: "hidden" }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fullName || "Employee"}</div>
-            <div style={{ fontSize: 10.5, color: "#9ca3af" }}>{designation || "Employee"}</div>
-          </div>
-        </div>
-      </div>
-    </aside>
+    React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, background: cfg.bg } },
+      React.createElement("div", { style: { width: 7, height: 7, borderRadius: "50%", background: cfg.dot } }),
+      React.createElement("span", { style: { fontSize: 11.5, fontWeight: 600, color: cfg.text } }, cfg.label)
+    )
   );
 }
 
@@ -367,58 +220,50 @@ function Topbar({ fullName }) {
 
   const handleLogout = async () => {
     try { await fetch(`${BASE}/api/auth/logout`, { method: "POST", headers: HEADERS() }); } catch (_) {}
-    localStorage.removeItem("auth_token");
+    localStorage.removeItem("employee_auth_token");
     localStorage.removeItem("auth_user");
     router.replace("/auth/Employeelogin");
   };
 
   return (
-    <div style={{ background: theme.topbar, borderBottom: `1px solid ${theme.border}`, padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, zIndex: 100 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", flex: 1, maxWidth: 240 }}>
-        <Icon d={ICONS.search} stroke="#9ca3af" />
-        <input placeholder="Search in HRMS…" style={{ border: "none", background: "transparent", fontSize: 12, color: "#6b7280", outline: "none", width: "100%" }} />
-        <span style={{ fontSize: 10, color: "#d1d5db" }}>⌘/</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-        <div onClick={() => { const next = !darkMode; setDarkMode(next); setTheme(next ? { sidebar:"#1e293b", topbar:"#1e293b", card:"#334155", pageBg:"#0f172a", text:"#f1f5f9", textSub:"#94a3b8", border:"#334155" } : { sidebar:"#ffffff", topbar:"#ffffff", card:"#ffffff", pageBg:"#f9fafb", text:"#111827", textSub:"#6b7280", border:"#f1f5f9" }); }}
-          style={{ width: 32, height: 32, borderRadius: 8, background: "#f9fafb", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-          <Icon d={darkMode ? ICONS.sun : ICONS.monitor} stroke="#6b7280" size={14} />
-        </div>
-        <div style={{ position: "relative", width: 32, height: 32, borderRadius: 8, background: "#f9fafb", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-          onClick={() => setNotifications(0)}>
-          <Icon d={ICONS.bell} stroke="#6b7280" size={14} />
-          {notifications > 0 && (
-            <div style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: "#ef4444", border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 7, color: "#fff", fontWeight: 800 }}>{notifications}</span>
-            </div>
-          )}
-        </div>
-        <div ref={profileRef} style={{ position: "relative" }}>
-          <div onClick={() => setShowProfile(s => !s)} style={{ cursor: "pointer" }}>
-            <Avatar name={fullName || "Employee"} size={32} color={ACCENT} />
-          </div>
-          {showProfile && (
-            <div style={{ position: "absolute", top: 42, right: 0, width: 220, background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", zIndex: 999, overflow: "hidden" }}>
-              <div style={{ background: "linear-gradient(135deg,#1e293b,#334155)", padding: "14px 16px", display: "flex", gap: 10, alignItems: "center" }}>
-                <Avatar name={fullName || "E"} size={38} color={ACCENT} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{fullName || "Employee"}</div>
-                  <div style={{ fontSize: 10, color: "#94a3b8" }}>Employee</div>
-                </div>
-              </div>
-              <div onClick={handleLogout} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#ef4444" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#fef2f2"}
-                onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
-                <div style={{ width: 28, height: 28, borderRadius: 7, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon d={ICONS.logOut} stroke="#ef4444" size={13} />
-                </div>
-                Sign Out
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    React.createElement("div", { style: { background: theme.topbar, borderBottom: `1px solid ${theme.border}`, padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, zIndex: 100 } },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", flex: 1, maxWidth: 240 } },
+        React.createElement(Icon, { d: ICONS.search, stroke: "#9ca3af" }),
+        React.createElement("input", { placeholder: "Search in HRMS…", style: { border: "none", background: "transparent", fontSize: 12, color: "#6b7280", outline: "none", width: "100%" } }),
+        React.createElement("span", { style: { fontSize: 10, color: "#d1d5db" } }, "⌘/")
+      ),
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" } },
+        React.createElement("div", { onClick: () => { const next = !darkMode; setDarkMode(next); setTheme(next ? { sidebar:"#1e293b", topbar:"#1e293b", card:"#334155", pageBg:"#0f172a", text:"#f1f5f9", textSub:"#94a3b8", border:"#334155" } : { sidebar:"#ffffff", topbar:"#ffffff", card:"#ffffff", pageBg:"#f9fafb", text:"#111827", textSub:"#6b7280", border:"#f1f5f9" }); }, style: { width: 32, height: 32, borderRadius: 8, background: "#f9fafb", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } },
+          React.createElement(Icon, { d: darkMode ? ICONS.sun : ICONS.monitor, stroke: "#6b7280", size: 14 })
+        ),
+        React.createElement("div", { style: { position: "relative", width: 32, height: 32, borderRadius: 8, background: "#f9fafb", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }, onClick: () => setNotifications(0) },
+          React.createElement(Icon, { d: ICONS.bell, stroke: "#6b7280", size: 14 }),
+          notifications > 0 && React.createElement("div", { style: { position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: "#ef4444", border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" } },
+            React.createElement("span", { style: { fontSize: 7, color: "#fff", fontWeight: 800 } }, notifications)
+          )
+        ),
+        React.createElement("div", { ref: profileRef, style: { position: "relative" } },
+          React.createElement("div", { onClick: () => setShowProfile(s => !s), style: { cursor: "pointer" } },
+            React.createElement(Avatar, { name: fullName || "Employee", size: 32, color: ACCENT })
+          ),
+          showProfile && React.createElement("div", { style: { position: "absolute", top: 42, right: 0, width: 220, background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", zIndex: 999, overflow: "hidden" } },
+            React.createElement("div", { style: { background: "linear-gradient(135deg,#1e293b,#334155)", padding: "14px 16px", display: "flex", gap: 10, alignItems: "center" } },
+              React.createElement(Avatar, { name: fullName || "E", size: 38, color: ACCENT }),
+              React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#fff" } }, fullName || "Employee"),
+                React.createElement("div", { style: { fontSize: 10, color: "#94a3b8" } }, "Employee")
+              )
+            ),
+            React.createElement("div", { onClick: handleLogout, style: { display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#ef4444" }, onMouseEnter: e => e.currentTarget.style.background = "#fef2f2", onMouseLeave: e => e.currentTarget.style.background = "#fff" },
+              React.createElement("div", { style: { width: 28, height: 28, borderRadius: 7, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center" } },
+                React.createElement(Icon, { d: ICONS.logOut, stroke: "#ef4444", size: 13 })
+              ),
+              "Sign Out"
+            )
+          )
+        )
+      )
+    )
   );
 }
 
@@ -441,31 +286,26 @@ function SettingsPanel() {
   const ACCENT = theme.accent;
   const [open, setOpen] = useState(false);
   return (
-    <>
-      <button onClick={() => setOpen(o => !o)} style={{ position: "fixed", bottom: 24, right: 24, width: 46, height: 46, borderRadius: "50%", background: ACCENT, border: "none", boxShadow: `0 4px 20px ${ACCENT}66`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 1000, transition: "transform 0.3s", transform: open ? "rotate(45deg)" : "rotate(0deg)" }}>
-        <Icon d={ICONS.settings} stroke="#fff" size={20} />
-      </button>
-      {open && (
-        <div style={{ position: "fixed", bottom: 80, right: 24, width: 300, background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", zIndex: 1000, overflow: "hidden" }}>
-          <div style={{ background: "linear-gradient(135deg,#1e293b,#334155)", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Theme Settings</div>
-              <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>Customise your workspace</div>
-            </div>
-            <button onClick={() => setTheme(DEFAULT_THEME)} style={{ fontSize: 10, padding: "3px 9px", background: "rgba(255,255,255,0.12)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" }}>Reset</button>
-          </div>
-          <div style={{ padding: "14px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.7px" }}>Accent Color</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {PRESET_THEMES.map((p, i) => (
-                <div key={i} title={p.name} onClick={() => setTheme({ accent: p.accent, accentDark: p.accentDark })}
-                  style={{ width: 28, height: 28, borderRadius: "50%", background: p.accent, cursor: "pointer", border: theme.accent === p.accent ? "3px solid #1e293b" : "3px solid transparent", transition: "all 0.15s" }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    React.createElement(React.Fragment, null,
+      React.createElement("button", { onClick: () => setOpen(o => !o), style: { position: "fixed", bottom: 24, right: 24, width: 46, height: 46, borderRadius: "50%", background: ACCENT, border: "none", boxShadow: `0 4px 20px ${ACCENT}66`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 1000, transition: "transform 0.3s", transform: open ? "rotate(45deg)" : "rotate(0deg)" } },
+        React.createElement(Icon, { d: ICONS.settings, stroke: "#fff", size: 20 })
+      ),
+      open && React.createElement("div", { style: { position: "fixed", bottom: 80, right: 24, width: 300, background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", zIndex: 1000, overflow: "hidden" } },
+        React.createElement("div", { style: { background: "linear-gradient(135deg,#1e293b,#334155)", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#fff" } }, "Theme Settings"),
+            React.createElement("div", { style: { fontSize: 10, color: "#94a3b8", marginTop: 2 } }, "Customise your workspace")
+          ),
+          React.createElement("button", { onClick: () => setTheme(DEFAULT_THEME), style: { fontSize: 10, padding: "3px 9px", background: "rgba(255,255,255,0.12)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" } }, "Reset")
+        ),
+        React.createElement("div", { style: { padding: "14px 16px" } },
+          React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.7px" } }, "Accent Color"),
+          React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+            PRESET_THEMES.map((p, i) => React.createElement("div", { key: i, title: p.name, onClick: () => setTheme({ accent: p.accent, accentDark: p.accentDark }), style: { width: 28, height: 28, borderRadius: "50%", background: p.accent, cursor: "pointer", border: theme.accent === p.accent ? "3px solid #1e293b" : "3px solid transparent", transition: "all 0.15s" } }))
+          )
+        )
+      )
+    )
   );
 }
 
@@ -477,7 +317,7 @@ function ProjectDetailPanel({ projectId, onClose }) {
   const ACCENT = theme.accent;
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [visible, setVisible] = useState(false);
 
@@ -503,27 +343,14 @@ function ProjectDetailPanel({ projectId, onClose }) {
   const startDate = project?.start_date ? new Date(project.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
   const endDate   = project?.end_date   ? new Date(project.end_date).toLocaleDateString("en-GB",   { day: "2-digit", month: "short", year: "numeric" }) : "—";
   const daysLeft  = project?.end_date ? Math.max(0, Math.ceil((new Date(project.end_date) - new Date()) / 86400000)) : null;
-  const managerName = project?.project_manager ? `${project.project_manager.firstname} ${project.project_manager.lastname}`.trim() : "—";
-  const leaderName  = project?.team_leader     ? `${project.team_leader.firstname} ${project.team_leader.lastname}`.trim()     : "—";
 
   const TABS = ["overview", "team", "client"];
 
   return (
-    <>
-      {/* Backdrop */}
-      <div onClick={handleClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(3px)", zIndex: 400, opacity: visible ? 1 : 0, transition: "opacity 0.28s ease" }} />
-
-      {/* Panel */}
-      <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0, width: 620,
-        background: "#fff", zIndex: 500, display: "flex", flexDirection: "column",
-        boxShadow: "-20px 0 60px rgba(0,0,0,0.18)",
-        transform: visible ? "translateX(0)" : "translateX(100%)",
-        transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-        overflow: "hidden",
-      }}>
-        <style>{`
+    React.createElement(React.Fragment, null,
+      React.createElement("div", { onClick: handleClose, style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(3px)", zIndex: 400, opacity: visible ? 1 : 0, transition: "opacity 0.28s ease" } }),
+      React.createElement("div", { style: { position: "fixed", top: 0, right: 0, bottom: 0, width: 620, background: "#fff", zIndex: 500, display: "flex", flexDirection: "column", boxShadow: "-20px 0 60px rgba(0,0,0,0.18)", transform: visible ? "translateX(0)" : "translateX(100%)", transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)", overflow: "hidden" } },
+        React.createElement("style", null, `
           @keyframes spin { from{transform:rotate(0)}to{transform:rotate(360deg)} }
           .tab-btn:hover { background: #f3f4f6 !important; }
           .detail-card { background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px; }
@@ -531,315 +358,195 @@ function ProjectDetailPanel({ projectId, onClose }) {
           .info-row:last-child { border-bottom: none; }
           .team-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.09) !important; transform: translateY(-1px); }
           .team-card { transition: all 0.18s ease !important; }
-        `}</style>
-
-        {/* ── HERO HEADER ── */}
-        <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1e3a5f 100%)", padding: "0 0 0 0", flexShrink: 0, position: "relative", overflow: "hidden" }}>
-          {/* Decorative blobs */}
-          <div style={{ position: "absolute", top: -50, right: -50, width: 200, height: 200, borderRadius: "50%", background: `${ACCENT}18`, pointerEvents: "none" }} />
-          <div style={{ position: "absolute", bottom: -30, left: 60, width: 130, height: 130, borderRadius: "50%", background: `${ACCENT}0e`, pointerEvents: "none" }} />
-
-          {/* Close + breadcrumb */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-              <span>Projects</span>
-              <Icon d="M9 18l6-6-6-6" size={10} stroke="#64748b" />
-              <span style={{ color: "#94a3b8" }}>Project Detail</span>
-            </div>
-            <button onClick={handleClose}
-              style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#94a3b8" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "#fff"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#94a3b8"; }}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-            </button>
-          </div>
-
-          {/* Project identity */}
-          <div style={{ padding: "16px 20px 0" }}>
-            {loading ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 20 }}>
-                <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth={2.5} strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-                <span style={{ fontSize: 13, color: "#64748b" }}>Loading project…</span>
-              </div>
-            ) : error ? (
-              <div style={{ color: "#ef4444", fontSize: 13, paddingBottom: 20 }}>{error}</div>
-            ) : project ? (
-              <>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: `${ACCENT}22`, border: `1.5px solid ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Icon d={ICONS.briefcase} stroke={ACCENT} size={24} />
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: ACCENT, background: `${ACCENT}20`, padding: "2px 8px", borderRadius: 8, letterSpacing: "0.5px" }}>
-                          {project.project_code}
-                        </span>
-                        <StatusBadge status={project.status} />
-                        <PriorityBadge priority={project.priority} />
-                      </div>
-                      <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#fff", letterSpacing: "-0.3px", lineHeight: 1.2 }}>{project.project_name}</h2>
-                      <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#94a3b8", maxWidth: 340 }}>{project.description || "No description provided."}</p>
-                    </div>
-                  </div>
-                  {daysLeft !== null && (
-                    <div style={{ background: daysLeft <= 3 ? "#fef2f2" : daysLeft <= 7 ? "#fffbeb" : "rgba(255,255,255,0.06)", border: `1px solid ${daysLeft <= 3 ? "#fca5a5" : daysLeft <= 7 ? "#fde68a" : "rgba(255,255,255,0.12)"}`, borderRadius: 12, padding: "10px 14px", textAlign: "center", flexShrink: 0 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: daysLeft <= 3 ? "#ef4444" : daysLeft <= 7 ? "#f59e0b" : "#fff" }}>{daysLeft}</div>
-                      <div style={{ fontSize: 9, color: daysLeft <= 3 ? "#991b1b" : daysLeft <= 7 ? "#92400e" : "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Days Left</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Quick stat pills */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 14 }}>
-                  {[
-                    { icon: ICONS.calendar, label: "Start", value: startDate },
-                    { icon: ICONS.calendar, label: "End",   value: endDate   },
-                    { icon: ICONS.dollar,   label: "Value", value: `₹${Number(project.value ?? 0).toLocaleString("en-IN")}` },
-                    { icon: ICONS.users,    label: "Team",  value: `${(project.team_members ?? []).length} Members` },
-                  ].map(({ icon, label, value }, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
-                      <Icon d={icon} stroke="#64748b" size={11} />
-                      <span style={{ fontSize: 9.5, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px" }}>{label}:</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0" }}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          {/* Tab bar */}
-          {project && (
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", padding: "0 20px", background: "rgba(0,0,0,0.12)" }}>
-              {TABS.map(tab => (
-                <button key={tab} className="tab-btn" onClick={() => setActiveTab(tab)}
-                  style={{ padding: "11px 14px", background: "transparent", border: "none", borderBottom: activeTab === tab ? `2px solid ${ACCENT}` : "2px solid transparent", color: activeTab === tab ? ACCENT : "#64748b", fontSize: 12, fontWeight: activeTab === tab ? 700 : 500, cursor: "pointer", textTransform: "capitalize", transition: "color 0.15s", letterSpacing: "0.2px" }}>
-                  {tab}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── TAB CONTENT ── */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
-          {!loading && !error && project && (
-            <>
-              {/* ── OVERVIEW TAB ── */}
-              {activeTab === "overview" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-                  {/* Two column info grid */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {/* Project Info */}
-                    <div className="detail-card">
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 }}>Project Info</div>
-                      {[
-                        { label: "Code",    value: project.project_code },
-                        { label: "Type",    value: (project.type ?? "—").replace("_"," ").replace(/\b\w/g, c => c.toUpperCase()) },
-                        { label: "Start",   value: startDate },
-                        { label: "End",     value: endDate   },
-                        { label: "Value",   value: `₹${Number(project.value ?? 0).toLocaleString("en-IN")}` },
-                      ].map(({ label, value }, i) => (
-                        <div className="info-row" key={i}>
-                          <span style={{ fontSize: 11.5, color: "#9ca3af" }}>{label}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{value}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Status overview */}
-                    <div className="detail-card">
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 }}>Status</div>
-                      <div style={{ marginBottom: 12 }}>
-                        <StatusBadge status={project.status} />
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <PriorityBadge priority={project.priority} />
-                      </div>
-                      <div style={{ marginTop: 8 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                          <span style={{ fontSize: 11, color: "#9ca3af" }}>Completion</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#374151" }}>{project.progress ?? 0}%</span>
-                        </div>
-                        <div style={{ height: 6, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ width: `${project.progress ?? 0}%`, height: "100%", background: `linear-gradient(90deg, ${ACCENT}, ${ACCENT}cc)`, borderRadius: 3, transition: "width 0.6s ease" }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <div className="detail-card">
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 10 }}>About Project</div>
-                    <p style={{ margin: 0, fontSize: 13, color: "#6b7280", lineHeight: 1.75 }}>
-                      {project.description || "No description provided for this project."}
-                    </p>
-                  </div>
-
-                  {/* Key Personnel */}
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 }}>Key Personnel</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      {[
-                        { role: "Project Manager", person: project.project_manager, color: "#6366f1" },
-                        { role: "Team Leader",     person: project.team_leader,     color: "#22c55e" },
-                      ].filter(({ person }) => !!person).map(({ role, person, color }) => {
-                        const name = `${person.firstname} ${person.lastname}`.trim();
-                        return (
-                          <div key={role} style={{ background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0", padding: "14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-                            <div style={{ position: "relative" }}>
-                              <Avatar name={name} size={42} color={avatarColor(name)} img={person.profile_image ? `${person.profile_image}` : null} />
-                              <div style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: "50%", background: color, border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <Icon d={ICONS.checkCircle} stroke="#fff" size={8} />
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 700, color, background: `${color}15`, padding: "1px 7px", borderRadius: 8, marginBottom: 5, display: "inline-block" }}>{role}</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{name}</div>
-                              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{person.email}</div>
-                              {person.phone_number && <div style={{ fontSize: 11, color: "#9ca3af" }}>{person.phone_number}</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Team preview strip */}
-                  {(project.team_members ?? []).length > 0 && (
-                    <div className="detail-card">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px" }}>Team Members</div>
-                        <span style={{ fontSize: 11, color: ACCENT, fontWeight: 600 }}>{(project.team_members ?? []).length} Total</span>
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {(project.team_members ?? []).slice(0, 8).map(m => {
-                          const name = `${m.firstname} ${m.lastname}`.trim();
-                          return (
-                            <div key={m.id} title={name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                              <Avatar name={name} size={38} color={avatarColor(name)} img={m.profile_image ? `${m.profile_image}` : null} />
-                              <span style={{ fontSize: 9, color: "#9ca3af", maxWidth: 44, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.firstname}</span>
-                            </div>
-                          );
-                        })}
-                        {(project.team_members ?? []).length > 8 && (
-                          <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#6b7280", border: "2px solid #fff" }}>
-                            +{project.team_members.length - 8}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── TEAM TAB ── */}
-              {activeTab === "team" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 4 }}>
-                    All Team Members ({[
-                      project.project_manager && { ...project.project_manager, _role: "Project Manager" },
-                      project.team_leader     && { ...project.team_leader,     _role: "Team Leader"     },
-                      ...(project.team_members ?? []).map(m => ({ ...m, _role: "Team Member" })),
-                    ].filter(Boolean).length})
-                  </div>
-                  {[
-                    project.project_manager && { ...project.project_manager, _role: "Project Manager" },
-                    project.team_leader     && { ...project.team_leader,     _role: "Team Leader"     },
-                    ...(project.team_members ?? []).map(m => ({ ...m, _role: "Team Member" })),
-                  ].filter(Boolean).map((m, i) => {
+        `),
+        React.createElement("div", { style: { background: "linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1e3a5f 100%)", padding: "0 0 0 0", flexShrink: 0, position: "relative", overflow: "hidden" } },
+          React.createElement("div", { style: { position: "absolute", top: -50, right: -50, width: 200, height: 200, borderRadius: "50%", background: `${ACCENT}18`, pointerEvents: "none" } }),
+          React.createElement("div", { style: { position: "absolute", bottom: -30, left: 60, width: 130, height: 130, borderRadius: "50%", background: `${ACCENT}0e`, pointerEvents: "none" } }),
+          React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px 0" } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" } },
+              React.createElement("span", null, "Projects"),
+              React.createElement(Icon, { d: "M9 18l6-6-6-6", size: 10, stroke: "#64748b" }),
+              React.createElement("span", { style: { color: "#94a3b8" } }, "Project Detail")
+            ),
+            React.createElement("button", { onClick: handleClose, style: { width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#94a3b8" }, onMouseEnter: e => { e.currentTarget.style.background = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "#fff"; }, onMouseLeave: e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#94a3b8"; } },
+              React.createElement("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round" }, React.createElement("path", { d: "M18 6L6 18M6 6l12 12" }))
+            )
+          ),
+          React.createElement("div", { style: { padding: "16px 20px 0" } },
+            loading ? React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, paddingBottom: 20 } },
+              React.createElement("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: ACCENT, strokeWidth: 2.5, strokeLinecap: "round", style: { animation: "spin 0.8s linear infinite" } }, React.createElement("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" })),
+              React.createElement("span", { style: { fontSize: 13, color: "#64748b" } }, "Loading project…")
+            ) : error ? React.createElement("div", { style: { color: "#ef4444", fontSize: 13, paddingBottom: 20 } }, error) : project && React.createElement(React.Fragment, null,
+              React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 } },
+                React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
+                  React.createElement("div", { style: { width: 52, height: 52, borderRadius: 14, background: `${ACCENT}22`, border: `1.5px solid ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+                    React.createElement(Icon, { d: ICONS.briefcase, stroke: ACCENT, size: 24 })
+                  ),
+                  React.createElement("div", null,
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" } },
+                      React.createElement("span", { style: { fontSize: 10.5, fontWeight: 700, color: ACCENT, background: `${ACCENT}20`, padding: "2px 8px", borderRadius: 8, letterSpacing: "0.5px" } }, project.project_code),
+                      React.createElement(StatusBadge, { status: project.status }),
+                      React.createElement(PriorityBadge, { priority: project.priority })
+                    ),
+                    React.createElement("h2", { style: { margin: 0, fontSize: 19, fontWeight: 800, color: "#fff", letterSpacing: "-0.3px", lineHeight: 1.2 } }, project.project_name),
+                    React.createElement("p", { style: { margin: "4px 0 0", fontSize: 11.5, color: "#94a3b8", maxWidth: 340 } }, project.description || "No description provided.")
+                  )
+                ),
+                daysLeft !== null && React.createElement("div", { style: { background: daysLeft <= 3 ? "#fef2f2" : daysLeft <= 7 ? "#fffbeb" : "rgba(255,255,255,0.06)", border: `1px solid ${daysLeft <= 3 ? "#fca5a5" : daysLeft <= 7 ? "#fde68a" : "rgba(255,255,255,0.12)"}`, borderRadius: 12, padding: "10px 14px", textAlign: "center", flexShrink: 0 } },
+                  React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: daysLeft <= 3 ? "#ef4444" : daysLeft <= 7 ? "#f59e0b" : "#fff" } }, daysLeft),
+                  React.createElement("div", { style: { fontSize: 9, color: daysLeft <= 3 ? "#991b1b" : daysLeft <= 7 ? "#92400e" : "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" } }, "Days Left")
+                )
+              ),
+              React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 14 } },
+                [
+                  { icon: ICONS.calendar, label: "Start", value: startDate },
+                  { icon: ICONS.calendar, label: "End",   value: endDate   },
+                  { icon: ICONS.dollar,   label: "Value", value: `₹${Number(project.value ?? 0).toLocaleString("en-IN")}` },
+                  { icon: ICONS.users,    label: "Team",  value: `${(project.team_members ?? []).length} Members` },
+                ].map(({ icon, label, value }, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 } },
+                  React.createElement(Icon, { d: icon, stroke: "#64748b", size: 11 }),
+                  React.createElement("span", { style: { fontSize: 9.5, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px" } }, `${label}:`),
+                  React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#e2e8f0" } }, value)
+                ))
+              )
+            )
+          ),
+          project && React.createElement("div", { style: { borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", padding: "0 20px", background: "rgba(0,0,0,0.12)" } },
+            TABS.map(tab => React.createElement("button", { key: tab, className: "tab-btn", onClick: () => setActiveTab(tab), style: { padding: "11px 14px", background: "transparent", border: "none", borderBottom: activeTab === tab ? `2px solid ${ACCENT}` : "2px solid transparent", color: activeTab === tab ? ACCENT : "#64748b", fontSize: 12, fontWeight: activeTab === tab ? 700 : 500, cursor: "pointer", textTransform: "capitalize", transition: "color 0.15s", letterSpacing: "0.2px" } }, tab))
+          )
+        ),
+        React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "20px" } },
+          !loading && !error && project && (activeTab === "overview" ?
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+                React.createElement("div", { className: "detail-card" },
+                  React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 } }, "Project Info"),
+                  [
+                    { label: "Code",    value: project.project_code },
+                    { label: "Type",    value: (project.type ?? "—").replace("_"," ").replace(/\b\w/g, c => c.toUpperCase()) },
+                    { label: "Start",   value: startDate },
+                    { label: "End",     value: endDate   },
+                    { label: "Value",   value: `₹${Number(project.value ?? 0).toLocaleString("en-IN")}` },
+                  ].map(({ label, value }, i) => React.createElement("div", { className: "info-row", key: i },
+                    React.createElement("span", { style: { fontSize: 11.5, color: "#9ca3af" } }, label),
+                    React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "#374151" } }, value)
+                  ))
+                ),
+                React.createElement("div", { className: "detail-card" },
+                  React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 } }, "Status"),
+                  React.createElement("div", { style: { marginBottom: 12 } }, React.createElement(StatusBadge, { status: project.status })),
+                  React.createElement("div", { style: { marginBottom: 12 } }, React.createElement(PriorityBadge, { priority: project.priority })),
+                  React.createElement("div", { style: { marginTop: 8 } },
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 5 } },
+                      React.createElement("span", { style: { fontSize: 11, color: "#9ca3af" } }, "Completion"),
+                      React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#374151" } }, `${project.progress ?? 0}%`)
+                    ),
+                    React.createElement("div", { style: { height: 6, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" } },
+                      React.createElement("div", { style: { width: `${project.progress ?? 0}%`, height: "100%", background: `linear-gradient(90deg, ${ACCENT}, ${ACCENT}cc)`, borderRadius: 3, transition: "width 0.6s ease" } })
+                    )
+                  )
+                )
+              ),
+              React.createElement("div", { className: "detail-card" },
+                React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 10 } }, "About Project"),
+                React.createElement("p", { style: { margin: 0, fontSize: 13, color: "#6b7280", lineHeight: 1.75 } }, project.description || "No description provided for this project.")
+              ),
+              (project.team_members ?? []).length > 0 && React.createElement("div", { className: "detail-card" },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+                  React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px" } }, "Team Members"),
+                  React.createElement("span", { style: { fontSize: 11, color: ACCENT, fontWeight: 600 } }, `${(project.team_members ?? []).length} Total`)
+                ),
+                React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+                  (project.team_members ?? []).slice(0, 8).map(m => {
                     const name = `${m.firstname} ${m.lastname}`.trim();
-                    const roleColor = m._role === "Project Manager" ? "#6366f1" : m._role === "Team Leader" ? "#22c55e" : "#9ca3af";
-                    return (
-                      <div key={`${m.id}-${i}`} className="team-card"
-                        style={{ display: "flex", gap: 12, padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0", alignItems: "center" }}>
-                        <div style={{ position: "relative" }}>
-                          <Avatar name={name} size={46} color={avatarColor(name)} img={m.profile_image ? `${m.profile_image}` : null} />
-                          <div style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: "50%", background: "#22c55e", border: "2px solid #fff" }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                            <span style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{name}</span>
-                            <span style={{ fontSize: 9.5, fontWeight: 700, color: roleColor, background: `${roleColor}15`, padding: "1px 7px", borderRadius: 8 }}>{m._role}</span>
-                          </div>
-                          <div style={{ fontSize: 11.5, color: "#6b7280" }}>{m.email}</div>
-                          {m.phone_number && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{m.phone_number}</div>}
-                        </div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <div style={{ width: 30, height: 30, borderRadius: 8, background: "#fff", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                            <Icon d={ICONS.mail} stroke="#6b7280" size={13} />
-                          </div>
-                        </div>
-                      </div>
+                    return React.createElement("div", { key: m.id, title: name, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } },
+                      React.createElement(Avatar, { name: name, size: 38, color: avatarColor(name), img: m.profile_image ? `${m.profile_image}` : null }),
+                      React.createElement("span", { style: { fontSize: 9, color: "#9ca3af", maxWidth: 44, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, m.firstname)
                     );
-                  })}
-                </div>
-              )}
-
-              {/* ── CLIENT TAB ── */}
-              {activeTab === "client" && project.client && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {/* Client hero */}
-                  <div style={{ background: "linear-gradient(135deg, #1e293b, #334155)", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 13, background: `${ACCENT}25`, border: `1.5px solid ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon d={ICONS.building} stroke={ACCENT} size={24} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>{project.client.company_name}</div>
-                      <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 2 }}>{project.client.client_code}</div>
-                      <div style={{ marginTop: 6 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 9px", borderRadius: 8, background: "#dcfce7", color: "#166534" }}>{project.client.status}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    {[
-                      { label: "Contact Person",  value: project.client.contact_person },
-                      { label: "Email",           value: project.client.email          },
-                      { label: "Phone",           value: project.client.phone          },
-                      { label: "City",            value: project.client.city           },
-                      { label: "State",           value: project.client.state          },
-                      { label: "Country",         value: project.client.country        },
-                      { label: "Payment Terms",   value: (project.client.payment_terms ?? "").replace("_"," ").toUpperCase() },
-                      { label: "Credit Limit",    value: `₹${Number(project.client.credit_limit ?? 0).toLocaleString("en-IN")}` },
-                    ].map(({ label, value }, i) => (
-                      <div key={i} style={{ padding: "11px 14px", background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontSize: 9.5, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{label}</div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "#374151" }}>{value || "—"}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Address</div>
-                    <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.75 }}>
-                      {project.client.address}<br />
-                      {project.client.city}, {project.client.state} - {project.client.zip_code}<br />
-                      {project.client.country}
-                    </div>
-                  </div>
-
-                  {project.client.notes && (
-                    <div style={{ background: "#fffbeb", borderRadius: 12, padding: "12px 14px", border: "1px solid #fde68a" }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>Notes</div>
-                      <div style={{ fontSize: 12.5, color: "#78350f", lineHeight: 1.65 }}>{project.client.notes}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {activeTab === "client" && !project.client && (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 13 }}>
-                  No client linked to this project.
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </>
+                  }),
+                  (project.team_members ?? []).length > 8 && React.createElement("div", { style: { width: 38, height: 38, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#6b7280", border: "2px solid #fff" } }, `+${project.team_members.length - 8}`)
+                )
+              )
+            ) : activeTab === "team" ?
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+              React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 4 } }, `All Team Members (${[
+                project.project_manager && { ...project.project_manager, _role: "Project Manager" },
+                project.team_leader     && { ...project.team_leader,     _role: "Team Leader"     },
+                ...(project.team_members ?? []).map(m => ({ ...m, _role: "Team Member" })),
+              ].filter(Boolean).length})`),
+              [
+                project.project_manager && { ...project.project_manager, _role: "Project Manager" },
+                project.team_leader     && { ...project.team_leader,     _role: "Team Leader"     },
+                ...(project.team_members ?? []).map(m => ({ ...m, _role: "Team Member" })),
+              ].filter(Boolean).map((m, i) => {
+                const name = `${m.firstname} ${m.lastname}`.trim();
+                const roleColor = m._role === "Project Manager" ? "#6366f1" : m._role === "Team Leader" ? "#22c55e" : "#9ca3af";
+                return React.createElement("div", { key: `${m.id}-${i}`, className: "team-card", style: { display: "flex", gap: 12, padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0", alignItems: "center" } },
+                  React.createElement("div", { style: { position: "relative" } },
+                    React.createElement(Avatar, { name: name, size: 46, color: avatarColor(name), img: m.profile_image ? `${m.profile_image}` : null }),
+                    React.createElement("div", { style: { position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: "50%", background: "#22c55e", border: "2px solid #fff" } })
+                  ),
+                  React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 } },
+                      React.createElement("span", { style: { fontSize: 13.5, fontWeight: 700, color: "#111827" } }, name),
+                      React.createElement("span", { style: { fontSize: 9.5, fontWeight: 700, color: roleColor, background: `${roleColor}15`, padding: "1px 7px", borderRadius: 8 } }, m._role)
+                    ),
+                    React.createElement("div", { style: { fontSize: 11.5, color: "#6b7280" } }, m.email),
+                    m.phone_number && React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginTop: 1 } }, m.phone_number)
+                  ),
+                  React.createElement("div", { style: { display: "flex", gap: 6 } },
+                    React.createElement("div", { style: { width: 30, height: 30, borderRadius: 8, background: "#fff", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } },
+                      React.createElement(Icon, { d: ICONS.mail, stroke: "#6b7280", size: 13 })
+                    )
+                  )
+                );
+              })
+            ) : activeTab === "client" && (project.client ?
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+              React.createElement("div", { style: { background: "linear-gradient(135deg, #1e293b, #334155)", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 } },
+                React.createElement("div", { style: { width: 52, height: 52, borderRadius: 13, background: `${ACCENT}25`, border: `1.5px solid ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center" } },
+                  React.createElement(Icon, { d: ICONS.building, stroke: ACCENT, size: 24 })
+                ),
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: "#fff" } }, project.client.company_name),
+                  React.createElement("div", { style: { fontSize: 11.5, color: "#94a3b8", marginTop: 2 } }, project.client.client_code),
+                  React.createElement("div", { style: { marginTop: 6 } },
+                    React.createElement("span", { style: { fontSize: 10.5, fontWeight: 600, padding: "2px 9px", borderRadius: 8, background: "#dcfce7", color: "#166534" } }, project.client.status)
+                  )
+                )
+              ),
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+                [
+                  { label: "Contact Person",  value: project.client.contact_person },
+                  { label: "Email",           value: project.client.email          },
+                  { label: "Phone",           value: project.client.phone          },
+                  { label: "City",            value: project.client.city           },
+                  { label: "State",           value: project.client.state          },
+                  { label: "Country",         value: project.client.country        },
+                  { label: "Payment Terms",   value: (project.client.payment_terms ?? "").replace("_"," ").toUpperCase() },
+                  { label: "Credit Limit",    value: `₹${Number(project.client.credit_limit ?? 0).toLocaleString("en-IN")}` },
+                ].map(({ label, value }, i) => React.createElement("div", { key: i, style: { padding: "11px 14px", background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" } },
+                  React.createElement("div", { style: { fontSize: 9.5, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 } }, label),
+                  React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#374151" } }, value || "—")
+                ))
+              ),
+              React.createElement("div", { style: { padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" } },
+                React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 } }, "Address"),
+                React.createElement("div", { style: { fontSize: 12.5, color: "#6b7280", lineHeight: 1.75 } },
+                  project.client.address, React.createElement("br", null),
+                  `${project.client.city}, ${project.client.state} - ${project.client.zip_code}`, React.createElement("br", null),
+                  project.client.country
+                )
+              ),
+              project.client.notes && React.createElement("div", { style: { background: "#fffbeb", borderRadius: 12, padding: "12px 14px", border: "1px solid #fde68a" } },
+                React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 } }, "Notes"),
+                React.createElement("div", { style: { fontSize: 12.5, color: "#78350f", lineHeight: 1.65 } }, project.client.notes)
+              )
+            ) : React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 13 } }, "No client linked to this project."))
+          )
+        )
+      )
+    )
   );
 }
 
@@ -849,16 +556,16 @@ function ProjectDetailPanel({ projectId, onClose }) {
 function ProjectsListContent({ onSelectProject }) {
   const { theme } = useTheme();
   const ACCENT = theme.accent;
-  const [projects, setProjects]         = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState(null);
-  const [search, setSearch]             = useState("");
-  const [viewMode, setViewMode]         = useState("list");
-  const [rowsPerPage, setRowsPerPage]   = useState(10);
-  const [page, setPage]                 = useState(1);
-  const [selectedIds, setSelectedIds]   = useState(new Set());
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("list");
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [statusFilter, setStatusFilter] = useState("");
-  const [allChecked, setAllChecked]     = useState(false);
+  const [allChecked, setAllChecked] = useState(false);
 
   useEffect(() => {
     fetch(`${BASE}/api/employee/projects`, { headers: HEADERS() })
@@ -891,225 +598,171 @@ function ProjectsListContent({ onSelectProject }) {
   };
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 80, gap: 10 }}>
-      <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 0.8s linear infinite" }}>
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-      <span style={{ fontSize: 14, color: "#9ca3af" }}>Loading projects…</span>
-    </div>
+    React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", padding: 80, gap: 10 } },
+      React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: ACCENT, strokeWidth: 2.5, strokeLinecap: "round", strokeLinejoin: "round", style: { animation: "spin 0.8s linear infinite" } },
+        React.createElement("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" })
+      ),
+      React.createElement("span", { style: { fontSize: 14, color: "#9ca3af" } }, "Loading projects…")
+    )
   );
 
   if (error) return (
-    <div style={{ background: "#fef2f2", borderRadius: 10, padding: 20, color: "#991b1b", fontSize: 13 }}>Error: {error}</div>
+    React.createElement("div", { style: { background: "#fef2f2", borderRadius: 10, padding: 20, color: "#991b1b", fontSize: 13 } }, `Error: ${error}`)
   );
 
   return (
-    <div>
-      <style>{`
+    React.createElement("div", null,
+      React.createElement("style", null, `
         @keyframes spin { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
         .proj-row:hover { background: #fafafa !important; }
         .proj-row:hover .proj-actions { opacity: 1 !important; }
         .proj-actions { opacity: 0; transition: opacity 0.15s; }
         .chk:checked { accent-color: ${ACCENT}; }
-      `}</style>
-
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #f1f5f9", overflow: "hidden" }}>
-        {/* Toolbar */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Project List</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-              style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 28px 6px 10px", fontSize: 12, color: "#6b7280", cursor: "pointer", outline: "none", appearance: "none" }}>
-              <option value="">Select Status</option>
-              <option value="active">Active</option>
-              <option value="planning">Planning</option>
-              <option value="in-progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <button style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 12px", fontSize: 12, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-              Sort By : Last 7 Days ▾
-            </button>
-          </div>
-        </div>
-
-        {/* Sub-toolbar */}
-        <div style={{ padding: "10px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#fafafa" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "#6b7280" }}>Row Per Page</span>
-            <select value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setPage(1); }}
-              style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#374151", cursor: "pointer" }}>
-              {[5, 10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>Entries</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* View toggle */}
-            <div style={{ display: "flex", gap: 2, background: "#f3f4f6", borderRadius: 7, padding: 2 }}>
-              {[
+      `),
+      React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #f1f5f9", overflow: "hidden" } },
+        React.createElement("div", { style: { padding: "14px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
+          React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#111827" } }, "Project List"),
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            React.createElement("select", { value: statusFilter, onChange: e => { setStatusFilter(e.target.value); setPage(1); }, style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 28px 6px 10px", fontSize: 12, color: "#6b7280", cursor: "pointer", outline: "none", appearance: "none" } },
+              React.createElement("option", { value: "" }, "Select Status"),
+              React.createElement("option", { value: "active" }, "Active"),
+              React.createElement("option", { value: "planning" }, "Planning"),
+              React.createElement("option", { value: "in-progress" }, "In Progress"),
+              React.createElement("option", { value: "completed" }, "Completed"),
+              React.createElement("option", { value: "inactive" }, "Inactive")
+            ),
+            React.createElement("button", { style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 12px", fontSize: 12, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } }, "Sort By : Last 7 Days ▾")
+          )
+        ),
+        React.createElement("div", { style: { padding: "10px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#fafafa" } },
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+            React.createElement("span", { style: { fontSize: 12, color: "#6b7280" } }, "Row Per Page"),
+            React.createElement("select", { value: rowsPerPage, onChange: e => { setRowsPerPage(Number(e.target.value)); setPage(1); }, style: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#374151", cursor: "pointer" } },
+              [5, 10, 20, 50].map(n => React.createElement("option", { key: n, value: n }, n))
+            ),
+            React.createElement("span", { style: { fontSize: 12, color: "#9ca3af" } }, "Entries")
+          ),
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            React.createElement("div", { style: { display: "flex", gap: 2, background: "#f3f4f6", borderRadius: 7, padding: 2 } },
+              [
                 { mode: "list", d: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" },
                 { mode: "grid", d: "M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z" },
-              ].map(({ mode, d }) => (
-                <button key={mode} onClick={() => setViewMode(mode)}
-                  style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: viewMode === mode ? "#fff" : "transparent", borderRadius: 5, border: "none", cursor: "pointer", boxShadow: viewMode === mode ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
-                  <Icon d={d} size={14} stroke={viewMode === mode ? ACCENT : "#9ca3af"} />
-                </button>
-              ))}
-            </div>
-            {/* Search */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px" }}>
-              <Icon d={ICONS.search} stroke="#9ca3af" size={13} />
-              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search…"
-                style={{ border: "none", background: "transparent", fontSize: 12, color: "#374151", outline: "none", width: 130 }} />
-            </div>
-          </div>
-        </div>
-
-        {viewMode === "list" ? (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#f9fafb" }}>
-                  <th style={{ width: 40, padding: "10px 16px", textAlign: "center" }}>
-                    <input type="checkbox" checked={allChecked} onChange={toggleAll} className="chk" style={{ width: 14, height: 14, cursor: "pointer" }} />
-                  </th>
-                  {[
-                    { label: "Project ID", w: 100 }, { label: "Project Name", w: 220 },
-                    { label: "Leader", w: 160 }, { label: "Team", w: 130 },
-                    { label: "Deadline", w: 110 }, { label: "Priority", w: 110 },
-                    { label: "Status", w: 110 }, { label: "", w: 80 },
-                  ].map(({ label, w }, i) => (
-                    <th key={i} style={{ padding: "10px 16px 10px 0", textAlign: "left", fontSize: 11.5, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", width: w }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        {label}
-                        {label && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth={2.5} strokeLinecap="round"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></svg>}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: "40px 0", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>No projects found</td></tr>
-                ) : paginated.map(p => {
-                  const leaderName = p.team_leader ? `${p.team_leader.firstname} ${p.team_leader.lastname}`.trim() : "—";
-                  const isChecked = selectedIds.has(p.id);
-                  return (
-                    <tr key={p.id} className="proj-row"
-                      style={{ borderTop: "1px solid #f3f4f6", background: isChecked ? `${ACCENT}08` : "#fff", transition: "background 0.12s", cursor: "default" }}>
-                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                        <input type="checkbox" checked={isChecked} onChange={() => toggleRow(p.id)} className="chk" style={{ width: 14, height: 14, cursor: "pointer" }} />
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#6b7280", letterSpacing: "0.3px" }}>{p.project_code}</span>
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <button onClick={() => onSelectProject(p.id)}
-                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13.5, fontWeight: 600, color: "#111827", textAlign: "left" }}
-                          onMouseEnter={e => e.currentTarget.style.color = ACCENT}
-                          onMouseLeave={e => e.currentTarget.style.color = "#111827"}>
-                          {p.project_name}
-                        </button>
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <Avatar name={leaderName} size={28} color={avatarColor(leaderName)} img={p.team_leader?.profile_image ? `${p.team_leader.profile_image}` : null} />
-                          <span style={{ fontSize: 12.5, color: "#374151", fontWeight: 500 }}>{leaderName}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <StackedAvatars members={p.team_members ?? []} max={3} size={26} />
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <span style={{ fontSize: 12.5, color: "#6b7280" }}>
-                          {p.end_date ? new Date(p.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 16px 12px 0" }}><PriorityBadge priority={p.priority} /></td>
-                      <td style={{ padding: "12px 16px 12px 0" }}><StatusBadge status={p.status} /></td>
-                      <td style={{ padding: "12px 16px 12px 0" }}>
-                        <div className="proj-actions" style={{ display: "flex", gap: 6 }}>
-                          <button onClick={() => onSelectProject(p.id)} 
-  style={{ width: 28, height: 28, background: "#e0f2fe", border: "1px solid #7dd3fc", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-  <Icon d={ICONS.eye} size={12} stroke="#0284c7" />
-</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* Grid view */
-          <div style={{ padding: 20, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-            {paginated.length === 0 ? (
-              <div style={{ gridColumn: "1/-1", textAlign: "center", color: "#9ca3af", fontSize: 13, padding: 40 }}>No projects found</div>
-            ) : paginated.map(p => {
-              const leaderName = p.team_leader ? `${p.team_leader.firstname} ${p.team_leader.lastname}`.trim() : "—";
-              return (
-                <div key={p.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #f1f5f9", overflow: "hidden", transition: "box-shadow 0.2s", cursor: "pointer" }}
-                  onClick={() => onSelectProject(p.id)}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
-                  <div style={{ padding: "14px 16px", borderBottom: "1px solid #f9fafb", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: "#9ca3af", marginBottom: 3 }}>{p.project_code}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{p.project_name}</div>
-                    </div>
-                    <PriorityBadge priority={p.priority} />
-                  </div>
-                  <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Avatar name={leaderName} size={26} color={avatarColor(leaderName)} />
-                        <div>
-                          <div style={{ fontSize: 11, color: "#9ca3af" }}>Leader</div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{leaderName}</div>
-                        </div>
-                      </div>
-                      <StackedAvatars members={p.team_members ?? []} max={3} size={24} />
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ fontSize: 11.5, color: "#9ca3af" }}>
-                        <span style={{ color: "#ef4444", fontWeight: 600 }}>Deadline: </span>
-                        {p.end_date ? new Date(p.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                      </div>
-                      <StatusBadge status={p.status} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafafa" }}>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>
-            Showing {Math.min((page - 1) * rowsPerPage + 1, filtered.length)}–{Math.min(page * rowsPerPage, filtered.length)} of {filtered.length} entries
-          </span>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              style={{ width: 30, height: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
-              <Icon d="M15 18l-6-6 6-6" size={14} stroke="#6b7280" />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).slice(Math.max(0, page - 3), page + 2).map(n => (
-              <button key={n} onClick={() => setPage(n)}
-                style={{ width: 30, height: 30, background: n === page ? ACCENT : "#fff", border: `1px solid ${n === page ? ACCENT : "#e5e7eb"}`, borderRadius: 6, fontSize: 12.5, fontWeight: n === page ? 700 : 400, color: n === page ? "#fff" : "#6b7280", cursor: "pointer" }}>
-                {n}
-              </button>
-            ))}
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              style={{ width: 30, height: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
-              <Icon d="M9 18l6-6-6-6" size={14} stroke="#6b7280" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              ].map(({ mode, d }) => React.createElement("button", { key: mode, onClick: () => setViewMode(mode), style: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: viewMode === mode ? "#fff" : "transparent", borderRadius: 5, border: "none", cursor: "pointer", boxShadow: viewMode === mode ? "0 1px 4px rgba(0,0,0,0.08)" : "none" } },
+                React.createElement(Icon, { d: d, size: 14, stroke: viewMode === mode ? ACCENT : "#9ca3af" })
+              ))
+            ),
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px" } },
+              React.createElement(Icon, { d: ICONS.search, stroke: "#9ca3af", size: 13 }),
+              React.createElement("input", { value: search, onChange: e => { setSearch(e.target.value); setPage(1); }, placeholder: "Search…", style: { border: "none", background: "transparent", fontSize: 12, color: "#374151", outline: "none", width: 130 } })
+            )
+          )
+        ),
+        viewMode === "list" ? React.createElement("div", { style: { overflowX: "auto" } },
+          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+            React.createElement("thead", null,
+              React.createElement("tr", { style: { background: "#f9fafb" } },
+                React.createElement("th", { style: { width: 40, padding: "10px 16px", textAlign: "center" } },
+                  React.createElement("input", { type: "checkbox", checked: allChecked, onChange: toggleAll, className: "chk", style: { width: 14, height: 14, cursor: "pointer" } })
+                ),
+                [
+                  { label: "Project ID", w: 100 }, { label: "Project Name", w: 220 },
+                  { label: "Leader", w: 160 }, { label: "Team", w: 130 },
+                  { label: "Deadline", w: 110 }, { label: "Priority", w: 110 },
+                  { label: "Status", w: 110 }, { label: "", w: 80 },
+                ].map(({ label, w }, i) => React.createElement("th", { key: i, style: { padding: "10px 16px 10px 0", textAlign: "left", fontSize: 11.5, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", width: w } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                    label,
+                    label && React.createElement("svg", { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "#d1d5db", strokeWidth: 2.5, strokeLinecap: "round" }, React.createElement("path", { d: "M8 9l4-4 4 4M8 15l4 4 4-4" }))
+                  )
+                ))
+              )
+            ),
+            React.createElement("tbody", null,
+              paginated.length === 0 ? React.createElement("tr", null, React.createElement("td", { colSpan: 8, style: { padding: "40px 0", textAlign: "center", color: "#9ca3af", fontSize: 13 } }, "No projects found")) : paginated.map(p => {
+                const leaderName = p.team_leader ? `${p.team_leader.firstname} ${p.team_leader.lastname}`.trim() : "—";
+                const isChecked = selectedIds.has(p.id);
+                return React.createElement("tr", { key: p.id, className: "proj-row", style: { borderTop: "1px solid #f3f4f6", background: isChecked ? `${ACCENT}08` : "#fff", transition: "background 0.12s", cursor: "default" } },
+                  React.createElement("td", { style: { padding: "12px 16px", textAlign: "center" } },
+                    React.createElement("input", { type: "checkbox", checked: isChecked, onChange: () => toggleRow(p.id), className: "chk", style: { width: 14, height: 14, cursor: "pointer" } })
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600, color: "#6b7280", letterSpacing: "0.3px" } }, p.project_code)
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement("button", { onClick: () => onSelectProject(p.id), style: { background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13.5, fontWeight: 600, color: "#111827", textAlign: "left" }, onMouseEnter: e => e.currentTarget.style.color = ACCENT, onMouseLeave: e => e.currentTarget.style.color = "#111827" }, p.project_name)
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                      React.createElement(Avatar, { name: leaderName, size: 28, color: avatarColor(leaderName), img: p.team_leader?.profile_image ? `${p.team_leader.profile_image}` : null }),
+                      React.createElement("span", { style: { fontSize: 12.5, color: "#374151", fontWeight: 500 } }, leaderName)
+                    )
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement(StackedAvatars, { members: p.team_members ?? [], max: 3, size: 26 })
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement("span", { style: { fontSize: 12.5, color: "#6b7280" } }, p.end_date ? new Date(p.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—")
+                  ),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } }, React.createElement(PriorityBadge, { priority: p.priority })),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } }, React.createElement(StatusBadge, { status: p.status })),
+                  React.createElement("td", { style: { padding: "12px 16px 12px 0" } },
+                    React.createElement("div", { className: "proj-actions", style: { display: "flex", gap: 6 } },
+                      React.createElement("button", { onClick: () => onSelectProject(p.id), style: { width: 28, height: 28, background: "#e0f2fe", border: "1px solid #7dd3fc", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } },
+                        React.createElement(Icon, { d: ICONS.eye, size: 12, stroke: "#0284c7" })
+                      )
+                    )
+                  )
+                );
+              })
+            )
+          )
+        ) : React.createElement("div", { style: { padding: 20, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 } },
+          paginated.length === 0 ? React.createElement("div", { style: { gridColumn: "1/-1", textAlign: "center", color: "#9ca3af", fontSize: 13, padding: 40 } }, "No projects found") : paginated.map(p => {
+            const leaderName = p.team_leader ? `${p.team_leader.firstname} ${p.team_leader.lastname}`.trim() : "—";
+            return React.createElement("div", { key: p.id, style: { background: "#fff", borderRadius: 12, border: "1px solid #f1f5f9", overflow: "hidden", transition: "box-shadow 0.2s", cursor: "pointer" }, onClick: () => onSelectProject(p.id), onMouseEnter: e => e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)", onMouseLeave: e => e.currentTarget.style.boxShadow = "none" },
+              React.createElement("div", { style: { padding: "14px 16px", borderBottom: "1px solid #f9fafb", display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 10.5, fontWeight: 600, color: "#9ca3af", marginBottom: 3 } }, p.project_code),
+                  React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#111827" } }, p.project_name)
+                ),
+                React.createElement(PriorityBadge, { priority: p.priority })
+              ),
+              React.createElement("div", { style: { padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 } },
+                React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                    React.createElement(Avatar, { name: leaderName, size: 26, color: avatarColor(leaderName) }),
+                    React.createElement("div", null,
+                      React.createElement("div", { style: { fontSize: 11, color: "#9ca3af" } }, "Leader"),
+                      React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#374151" } }, leaderName)
+                    )
+                  ),
+                  React.createElement(StackedAvatars, { members: p.team_members ?? [], max: 3, size: 24 })
+                ),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+                  React.createElement("div", { style: { fontSize: 11.5, color: "#9ca3af" } },
+                    React.createElement("span", { style: { color: "#ef4444", fontWeight: 600 } }, "Deadline: "),
+                    p.end_date ? new Date(p.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"
+                  ),
+                  React.createElement(StatusBadge, { status: p.status })
+                )
+              )
+            );
+          })
+        ),
+        React.createElement("div", { style: { padding: "12px 20px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafafa" } },
+          React.createElement("span", { style: { fontSize: 12, color: "#9ca3af" } }, `Showing ${Math.min((page - 1) * rowsPerPage + 1, filtered.length)}–${Math.min(page * rowsPerPage, filtered.length)} of ${filtered.length} entries`),
+          React.createElement("div", { style: { display: "flex", gap: 4 } },
+            React.createElement("button", { onClick: () => setPage(p => Math.max(1, p - 1)), disabled: page === 1, style: { width: 30, height: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 } },
+              React.createElement(Icon, { d: "M15 18l-6-6 6-6", size: 14, stroke: "#6b7280" })
+            ),
+            Array.from({ length: totalPages }, (_, i) => i + 1).slice(Math.max(0, page - 3), page + 2).map(n => React.createElement("button", { key: n, onClick: () => setPage(n), style: { width: 30, height: 30, background: n === page ? ACCENT : "#fff", border: `1px solid ${n === page ? ACCENT : "#e5e7eb"}`, borderRadius: 6, fontSize: 12.5, fontWeight: n === page ? 700 : 400, color: n === page ? "#fff" : "#6b7280", cursor: "pointer" } }, n)),
+            React.createElement("button", { onClick: () => setPage(p => Math.min(totalPages, p + 1)), disabled: page === totalPages, style: { width: 30, height: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 } },
+              React.createElement(Icon, { d: "M9 18l6-6-6-6", size: 14, stroke: "#6b7280" })
+            )
+          )
+        )
+      )
+    )
   );
 }
 
@@ -1133,7 +786,7 @@ function ProtectedRoute({ children, requiredRole }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN EXPORT — Projects Page
+// MAIN EXPORT — Projects Page (WITHOUT SIDEBAR)
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ProjectsPage() {
   const router = useRouter();
@@ -1164,75 +817,39 @@ export default function ProjectsPage() {
   };
 
   return (
-    <ThemeProvider>
-      <ProtectedRoute requiredRole="employee">
-        <InnerProjectsPage
-          activePage={activePage}
-          navigate={handleNavigate}
-          fullName={fullName}
-          designation={designation}
-          selectedProjectId={selectedProjectId}
-          setSelectedProjectId={setSelectedProjectId}
-        />
-        <SettingsPanel />
-      </ProtectedRoute>
-    </ThemeProvider>
-  );
-}
-
-function InnerProjectsPage({ activePage, navigate, fullName, designation, selectedProjectId, setSelectedProjectId }) {
-  const { theme } = useTheme();
-  const ACCENT = theme.accent;
-
-  return (
-    <>
-      <style>{`
-        @keyframes spin { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
-        @keyframes syncPulse { 0%,100%{opacity:1}50%{opacity:0.3} }
-      `}</style>
-      <div style={{ display: "flex", height: "100vh", fontFamily: "'Inter',-apple-system,sans-serif", background: theme.pageBg, color: theme.text, overflow: "hidden" }}>
-        <Sidebar activePage={activePage} onNavigate={navigate} fullName={fullName} designation={designation} />
-
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", height: "100vh" }}>
-          <Topbar fullName={fullName} />
-
-          {/* Breadcrumb bar */}
-          <div style={{ background: theme.topbar, borderBottom: `1px solid ${theme.border}`, padding: "9px 20px", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: theme.text }}>Projects</h1>
-                <div style={{ fontSize: 11, color: theme.textSub, marginTop: 1, display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ cursor: "pointer", color: ACCENT }} onClick={() => navigate("dashboard")}>🏠</span>
-                  <span>›</span>
-                  <span style={{ color: theme.text, fontWeight: 500 }}>Projects</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button style={{ display: "flex", alignItems: "center", gap: 5, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", fontSize: 12, color: "#6b7280", fontWeight: 500, cursor: "pointer" }}>
-                  <Icon d={ICONS.export} stroke="#6b7280" /> Export
-                </button>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", fontSize: 12, color: "#6b7280" }}>
-                  <Icon d={ICONS.calendar} stroke="#6b7280" /> 15-04-2025
-                </div>
-                {/* NOTE: "Add Project" button intentionally removed as per request */}
-              </div>
-            </div>
-          </div>
-
-          {/* Main content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-            <ProjectsListContent onSelectProject={(id) => setSelectedProjectId(id)} />
-          </div>
-        </div>
-      </div>
-
-      {/* Detail Panel slide-in */}
-      {selectedProjectId && (
-        <ProjectDetailPanel
-          projectId={selectedProjectId}
-          onClose={() => setSelectedProjectId(null)}
-        />
-      )}
-    </>
+    React.createElement(ThemeProvider, null,
+      React.createElement(ProtectedRoute, { requiredRole: "employee" },
+        React.createElement("div", { style: { display: "flex", height: "100vh", fontFamily: "'Inter',-apple-system,sans-serif", background: theme.pageBg, color: theme.text, overflow: "hidden" } },
+          React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", height: "100vh" } },
+            React.createElement(Topbar, { fullName: fullName }),
+            React.createElement("div", { style: { background: theme.topbar, borderBottom: `1px solid ${theme.border}`, padding: "9px 20px", flexShrink: 0 } },
+              React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+                React.createElement("div", null,
+                  React.createElement("h1", { style: { margin: 0, fontSize: 17, fontWeight: 700, color: theme.text } }, "Projects"),
+                  React.createElement("div", { style: { fontSize: 11, color: theme.textSub, marginTop: 1, display: "flex", alignItems: "center", gap: 4 } },
+                    React.createElement("span", { style: { cursor: "pointer", color: theme.accent }, onClick: () => handleNavigate("dashboard") }, "\uD83C\uDFE0"),
+                    React.createElement("span", null, "\u203A"),
+                    React.createElement("span", { style: { color: theme.text, fontWeight: 500 } }, "Projects")
+                  )
+                ),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                  React.createElement("button", { style: { display: "flex", alignItems: "center", gap: 5, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", fontSize: 12, color: "#6b7280", fontWeight: 500, cursor: "pointer" } },
+                    React.createElement(Icon, { d: ICONS.export, stroke: "#6b7280" }), " Export"
+                  ),
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, padding: "5px 10px", fontSize: 12, color: "#6b7280" } },
+                    React.createElement(Icon, { d: ICONS.calendar, stroke: "#6b7280" }), " 15-04-2025"
+                  )
+                )
+              )
+            ),
+            React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px 20px" } },
+              React.createElement(ProjectsListContent, { onSelectProject: (id) => setSelectedProjectId(id) })
+            )
+          )
+        ),
+        React.createElement(SettingsPanel, null),
+        selectedProjectId && React.createElement(ProjectDetailPanel, { projectId: selectedProjectId, onClose: () => setSelectedProjectId(null) })
+      )
+    )
   );
 }

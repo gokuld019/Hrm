@@ -347,7 +347,7 @@ function AddProjectModal({ onClose, onSuccess }) {
   };
 
   const authHeaders = () => {
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("admin_auth_token");
     return { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" };
   };
 
@@ -839,7 +839,7 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
     projectManagerId !== "";
 
   const authHeaders = () => {
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("admin_auth_token");
     return { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" };
   };
 
@@ -1116,7 +1116,7 @@ function ViewProjectModal({ projectId, onClose, onRefresh }) {
   const [successMsg, setSuccessMsg] = useState(null);
 
   const authHeaders = () => {
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("admin_auth_token");
     return { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" };
   };
 
@@ -1258,7 +1258,7 @@ export default function ProjectsGrid() {
   const fetchProjects = async () => {
     setLoading(true); setError(null);
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("admin_auth_token");
       const headers = { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" };
       const res = await fetch(`${BASE}/api/admin/projects`, { headers });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -1284,7 +1284,7 @@ export default function ProjectsGrid() {
     if (!confirmDelete) return;
     setDeleting(true);
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("admin_auth_token");
       const res = await fetch(`${BASE}/api/admin/projects/${confirmDelete.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" }

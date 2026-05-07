@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("admin_auth_token");
   return {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",

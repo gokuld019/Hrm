@@ -32,13 +32,44 @@ const SWAP_REQUESTS = [
 
 // ─── Auth headers ─────────────────────────────────────────────────────────────
 function authHeaders() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("auth_token") : "";
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("admin_auth_token") : "";
   return {
     "Content-Type":               "application/json",
     "Accept":                     "application/json",
     "Authorization":              `Bearer ${token}`,
     "ngrok-skip-browser-warning": "true",
   };
+}
+
+// ─── Helper: Get week start date (Monday) based on offset ─────────────────────
+// ─── Helper: Get week start date (Monday) based on offset ─────────────────────
+function getWeekStartDateFromOffset(offset = 0) {
+  const today = new Date();
+  // Get current date in Indian timezone (IST)
+  const currentDate = new Date(today.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  
+  // Apply week offset
+  currentDate.setDate(currentDate.getDate() + offset * 7);
+  
+  // Get the day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const dayOfWeek = currentDate.getDay();
+  
+  // Calculate days to subtract to get Monday
+  // If today is Monday (1), subtract 0 days
+  // If today is Tuesday (2), subtract 1 day, etc.
+  // If today is Sunday (0), subtract 6 days to get previous Monday
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+  const weekStart = new Date(currentDate);
+  weekStart.setDate(currentDate.getDate() - daysToSubtract);
+  
+  return weekStart;
+}
+
+// ─── Helper: Format date to YYYY-MM-DD for API ────────────────────────────────
+function getWeekStartDate(offset) {
+  const weekStart = getWeekStartDateFromOffset(offset);
+  return weekStart.toISOString().split('T')[0];
 }
 
 // ─── apiToUI ──────────────────────────────────────────────────────────────────
@@ -171,11 +202,52 @@ export default function ShiftSchedule() {
   const [selectedCell,       setSelectedCell]        = useState(null);
   const [deletingId,         setDeletingId]          = useState(null);
   const [savingShift,        setSavingShift]         = useState(false);
+  
+  // Stats from API
+  const [statsData,          setStatsData]           = useState({
+    shiftDistribution: [],
+    hoursOverview: { scheduled_hours: 0, worked_hours: 0, overtime_hours: 0, absent_hours: 0 },
+    attendanceRate: { on_time: 0, late: 0, early_out: 0, absent: 0 },
+    dailyHours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 },
+  });
+  const [statsLoading,       setStatsLoading]        = useState(false);
+
+  // ── Week label (derived from current date) ──────────────────────────────────
+  const weekStart = getWeekStartDateFromOffset(weekOffset);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const fmtDate = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
   const toast = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   }, []);
+
+  // ── Fetch dashboard stats ───────────────────────────────────────────────────
+  const fetchDashboardStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const weekStart = getWeekStartDate(weekOffset);
+      const res = await fetch(`${BASE_URL}/api/admin/shift-dashboard/stats?week_start=${weekStart}`, { 
+        headers: authHeaders() 
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      
+      if (json.success) {
+        setStatsData({
+          shiftDistribution: json.shift_distribution || [],
+          hoursOverview: json.hours_overview || { scheduled_hours: 0, worked_hours: 0, overtime_hours: 0, absent_hours: 0 },
+          attendanceRate: json.attendance_rate || { on_time: 0, late: 0, early_out: 0, absent: 0 },
+          dailyHours: json.daily_hours || { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 },
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch dashboard stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [weekOffset]);
 
   // ── Fetch employee counts from /api/admin/employees ───────────────────────
   const fetchEmployeeCounts = useCallback(async () => {
@@ -228,17 +300,16 @@ export default function ShiftSchedule() {
     }
   }, []);
 
-  // fetch both on mount
+  // fetch all data on mount and when week offset changes
   useEffect(() => {
     fetchShifts();
     fetchEmployeeCounts();
-  }, [fetchShifts, fetchEmployeeCounts]);
+    fetchDashboardStats();
+  }, [fetchShifts, fetchEmployeeCounts, fetchDashboardStats]);
 
   // ── helper: get real employee count for a shift ───────────────────────────
   const getEmpCount = useCallback((shift) => {
-    // Prefer the cross-referenced count from employees API
     if (shiftEmpCounts[shift.id] != null) return shiftEmpCounts[shift.id];
-    // Fall back to shift's own employees_count / employees array
     if (shift.employeeCount > 0) return shift.employeeCount;
     return shift.employees.length;
   }, [shiftEmpCounts]);
@@ -277,6 +348,7 @@ export default function ShiftSchedule() {
       toast("Shift created successfully!");
       setShowAddModal(false);
       setEditShift(null);
+      fetchDashboardStats();
     } catch (err) {
       toast(`Failed to create: ${err.message}`, "error");
     } finally {
@@ -303,6 +375,7 @@ export default function ShiftSchedule() {
       toast("Shift updated successfully!");
       setShowAddModal(false);
       setEditShift(null);
+      fetchDashboardStats();
     } catch (err) {
       toast(`Failed to update: ${err.message}`, "error");
     } finally {
@@ -321,6 +394,7 @@ export default function ShiftSchedule() {
       }
       setShifts(prev => prev.filter(s => s.id !== id));
       toast("Shift deleted.", "error");
+      fetchDashboardStats();
     } catch (err) {
       toast(`Failed to delete: ${err.message}`, "error");
     } finally {
@@ -336,20 +410,10 @@ export default function ShiftSchedule() {
     toast(action === "approved" ? "Swap request approved!" : "Swap request declined.");
   };
 
-  // ── Week label ────────────────────────────────────────────────────────────
-  const baseDate = new Date(2026, 3, 20);
-  baseDate.setDate(baseDate.getDate() + weekOffset * 7);
-  const weekStart = new Date(baseDate);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const fmtDate = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-
-  // ── Stats (using real employee counts) ───────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────
   const totalAssigned   = Object.values(shiftEmpCounts).reduce((a, b) => a + b, 0)
                           || shifts.reduce((s, sh) => s + getEmpCount(sh), 0);
   const coverageAlert   = shifts.filter(sh => getEmpCount(sh) < Math.ceil(sh.maxEmp * 0.5)).length;
-  const overtimeWorkers = 0;
   const pendingSwaps    = swaps.filter(s => s.status === "pending").length;
 
   return (
@@ -401,7 +465,7 @@ export default function ShiftSchedule() {
           </button>
         ))}
         <button
-          onClick={() => { fetchShifts(); fetchEmployeeCounts(); }}
+          onClick={() => { fetchShifts(); fetchEmployeeCounts(); fetchDashboardStats(); }}
           disabled={loading}
           className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-40">
           {loading ? <Spinner size={13} /> : <RefreshCw size={13} />}
@@ -469,8 +533,9 @@ export default function ShiftSchedule() {
                     <tr className="bg-gray-50">
                       <th className="text-left px-4 py-3 text-gray-400 font-semibold w-36">Shift</th>
                       {DAYS.map((d, i) => {
-                        const dt = new Date(weekStart); dt.setDate(dt.getDate() + i);
-                        const isToday = weekOffset === 0 && i === (new Date().getDay() + 6) % 7;
+                        const dt = new Date(weekStart);
+                        dt.setDate(dt.getDate() + i);
+                        const isToday = weekOffset === 0 && dt.toDateString() === new Date().toDateString();
                         return (
                           <th key={d} className="text-center px-2 py-3 font-semibold" style={{ minWidth: 90 }}>
                             <div className={`flex flex-col items-center gap-0.5 ${isToday ? "text-orange-500" : "text-gray-500"}`}>
@@ -485,8 +550,8 @@ export default function ShiftSchedule() {
                   <tbody>
                     {shifts.map((shift) => {
                       const preset   = SHIFT_PRESETS[shift.type] || SHIFT_PRESETS.morning;
-                      const empCount = getEmpCount(shift);   // ← real count from employees API
-                      const empNames = getEmpNames(shift);   // ← real names list
+                      const empCount = getEmpCount(shift);
+                      const empNames = getEmpNames(shift);
 
                       return (
                         <tr key={shift.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
@@ -502,7 +567,6 @@ export default function ShiftSchedule() {
                           {DAYS.map((_, di) => {
                             const active     = shift.days[di];
                             const isSelected = selectedCell?.shiftId === shift.id && selectedCell?.dayIndex === di;
-                            // empCount is the same for every active day (it's total assigned, not per-day)
                             const cellCount  = active ? empCount : 0;
                             const isUnder    = active && cellCount < Math.ceil(shift.maxEmp * 0.5);
 
@@ -514,7 +578,6 @@ export default function ShiftSchedule() {
                                     className={`rounded-xl p-2 cursor-pointer border transition-all ${isSelected ? "border-orange-400 shadow-md" : "border-transparent hover:border-gray-200"}`}
                                     style={{ background: isSelected ? preset.bg : isUnder ? "#fef2f2" : undefined }}
                                   >
-                                    {/* Avatar stack — up to 3, rest as +N */}
                                     <div className="flex justify-center -space-x-1.5 mb-1.5">
                                       {Array.from({ length: Math.min(3, cellCount) }).map((_, ei) => {
                                         const name  = empNames[ei] || "";
@@ -531,13 +594,10 @@ export default function ShiftSchedule() {
                                         </div>
                                       )}
                                     </div>
-
-                                    {/* Count */}
                                     <div className={`text-[10px] font-semibold ${isUnder ? "text-red-500" : "text-gray-500"}`}>
                                       {isUnder && <AlertTriangle size={8} className="inline mr-0.5" />}
                                       {cellCount}/{shift.maxEmp}
                                     </div>
-
                                     <button className="mt-1 w-full flex items-center justify-center gap-0.5 text-[10px] text-orange-400 hover:text-orange-600 font-semibold">
                                       <Plus size={9} /> Add
                                     </button>
@@ -819,92 +879,118 @@ export default function ShiftSchedule() {
       {/* ════ TAB 3 — ANALYTICS ════ */}
       {activeTab === "analytics" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Shift Distribution */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-sm font-bold text-gray-800 mb-4">Shift Distribution</p>
-            {loading ? <div className="flex justify-center py-8"><Spinner /></div> : shifts.length === 0 ? (
+            {statsLoading ? (
+              <div className="flex justify-center py-8"><Spinner /></div>
+            ) : statsData.shiftDistribution.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">No data yet</p>
-            ) : shifts.map(sh => {
-              const count = getEmpCount(sh);
-              const pct   = totalAssigned > 0 ? Math.round((count / totalAssigned) * 100) : 0;
-              const pr    = SHIFT_PRESETS[sh.type] || SHIFT_PRESETS.morning;
-              return (
-                <div key={sh.id} className="mb-4">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <pr.icon size={12} style={{ color: pr.color }} />
-                      <span className="font-semibold text-gray-700">{sh.name}</span>
+            ) : (
+              statsData.shiftDistribution.map((shift, idx) => {
+                const shiftType = shift.shift_name?.toLowerCase() || "morning";
+                const pr = SHIFT_PRESETS[shiftType] || SHIFT_PRESETS.morning;
+                return (
+                  <div key={idx} className="mb-4">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <pr.icon size={12} style={{ color: pr.color }} />
+                        <span className="font-semibold text-gray-700">{shift.shift_name}</span>
+                      </div>
+                      <span className="font-bold" style={{ color: pr.color }}>{shift.employees} emp</span>
                     </div>
-                    <span className="font-bold" style={{ color: pr.color }}>{count} emp</span>
+                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${shift.percentage}%`, background: pr.color }} />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">{shift.percentage}% of assigned workforce</p>
                   </div>
-                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: sh.color }} />
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1">{pct}% of assigned workforce</p>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
+          {/* Hours Overview */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-sm font-bold text-gray-800 mb-4">Hours Overview This Week</p>
             <div className="grid grid-cols-2 gap-3 mb-4">
               {[
-                { label: "Total Scheduled", value: "312h", color: "#f97316" },
-                { label: "Actual Worked",   value: "298h", color: "#22c55e" },
-                { label: "Overtime",        value: "14h",  color: "#ef4444" },
-                { label: "Absent Hours",    value: "8h",   color: "#eab308" },
-              ].map(({ label, value, color }) => (
+                { label: "Total Scheduled", value: statsData.hoursOverview.scheduled_hours, unit: "h", color: "#f97316" },
+                { label: "Actual Worked",   value: statsData.hoursOverview.worked_hours,   unit: "h", color: "#22c55e" },
+                { label: "Overtime",        value: statsData.hoursOverview.overtime_hours, unit: "h", color: "#ef4444" },
+                { label: "Absent Hours",    value: statsData.hoursOverview.absent_hours,   unit: "h", color: "#eab308" },
+              ].map(({ label, value, unit, color }) => (
                 <div key={label} className="p-3 rounded-xl border border-gray-100">
                   <p className="text-[10px] text-gray-400 mb-1">{label}</p>
-                  <p className="text-xl font-extrabold" style={{ color }}>{value}</p>
+                  <p className="text-xl font-extrabold" style={{ color }}>
+                    {statsLoading ? <Spinner size={14} /> : value}
+                    <span className="text-xs ml-0.5">{unit}</span>
+                  </p>
                 </div>
               ))}
             </div>
             <p className="text-xs text-gray-500 font-semibold mb-2">Daily Hours</p>
             <div className="flex items-end gap-1.5 h-20">
-              {[48,52,44,50,46,30,28].map((v, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full rounded-t-sm" style={{ height: `${(v/56)*68}px`, background: i >= 5 ? "#e2e8f0" : "#f97316", opacity: i >= 5 ? 0.5 : 1 }} />
-                  <span className="text-[9px] text-gray-400">{DAYS[i]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-sm font-bold text-gray-800 mb-4">Attendance Rate</p>
-            <div className="flex flex-col items-center mb-4">
-              <div className="relative w-32 h-32">
-                <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-                  <circle cx={60} cy={60} r={50} fill="none" stroke="#f1f5f9" strokeWidth={14} />
-                  <circle cx={60} cy={60} r={50} fill="none" stroke="#f97316" strokeWidth={14}
-                    strokeDasharray={`${0.92 * 314} ${314}`} strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-extrabold text-gray-800">92%</span>
-                  <span className="text-[10px] text-gray-400">Overall</span>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {[
-                { label: "On Time",   pct: 78, color: "#22c55e" },
-                { label: "Late",      pct: 9,  color: "#eab308" },
-                { label: "Early Out", pct: 5,  color: "#f97316" },
-                { label: "Absent",    pct: 8,  color: "#ef4444" },
-              ].map(({ label, pct, color }) => (
-                <div key={label} className="flex items-center gap-3 text-xs">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                  <span className="flex-1 text-gray-500">{label}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+              {DAYS.map(day => {
+                const hours = statsData.dailyHours[day] || 0;
+                const maxHours = Math.max(...Object.values(statsData.dailyHours), 1);
+                const height = (hours / maxHours) * 68;
+                return (
+                  <div key={day} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="w-full rounded-t-sm" style={{ height: `${height}px`, background: day === "Sat" || day === "Sun" ? "#e2e8f0" : "#f97316", opacity: day === "Sat" || day === "Sun" ? 0.5 : 1 }} />
+                    <span className="text-[9px] text-gray-400">{day}</span>
                   </div>
-                  <span className="font-bold text-gray-700 w-7 text-right">{pct}%</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
+          {/* Attendance Rate */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <p className="text-sm font-bold text-gray-800 mb-4">Attendance Rate This Week</p>
+            {statsLoading ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Spinner size={24} />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col items-center mb-4">
+                  <div className="relative w-32 h-32">
+                    <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+                      <circle cx={60} cy={60} r={50} fill="none" stroke="#f1f5f9" strokeWidth={14} />
+                      <circle 
+                        cx={60} cy={60} r={50} fill="none" stroke="#f97316" strokeWidth={14}
+                        strokeDasharray={`${(statsData.attendanceRate.on_time / 100) * 314} ${314}`} 
+                        strokeLinecap="round" 
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl font-extrabold text-gray-800">{statsData.attendanceRate.on_time}%</span>
+                      <span className="text-[10px] text-gray-400">On Time</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { label: "On Time",   pct: statsData.attendanceRate.on_time,    color: "#22c55e" },
+                    { label: "Late",      pct: statsData.attendanceRate.late,       color: "#eab308" },
+                    { label: "Early Out", pct: statsData.attendanceRate.early_out,  color: "#f97316" },
+                    { label: "Absent",    pct: statsData.attendanceRate.absent,     color: "#ef4444" },
+                  ].map(({ label, pct, color }) => (
+                    <div key={label} className="flex items-center gap-3 text-xs">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                      <span className="flex-1 text-gray-500">{label}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                      <span className="font-bold text-gray-700 w-7 text-right">{pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Recent Activity */}
           <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-sm font-bold text-gray-800 mb-4">Recent Activity</p>
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">

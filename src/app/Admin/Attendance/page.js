@@ -10,7 +10,7 @@ import {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-const getToken = () => localStorage.getItem("auth_token") ?? "";
+const getToken = () => localStorage.getItem("admin_auth_token") ?? "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = [

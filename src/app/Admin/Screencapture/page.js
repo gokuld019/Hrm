@@ -13,7 +13,7 @@ import {
 // ── Config ────────────────────────────────────────────────────────────
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
-const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("auth_token") ?? "" : "");
+const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("admin_auth_token") ?? "" : "");
 const getHeaders = () => ({
   "Content-Type": "application/json",
   "ngrok-skip-browser-warning": "true",

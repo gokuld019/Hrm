@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
-  Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+  Authorization: `Bearer ${localStorage.getItem("admin_auth_token")}`,
   Accept: "application/json",
   "ngrok-skip-browser-warning": "true",
 });

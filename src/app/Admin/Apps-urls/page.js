@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("auth_token") ?? "" : "");
+const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("admin_auth_token") ?? "" : "");
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#a855f7","#ec4899","#0ea5e9","#f43f5e","#84cc16","#eab308","#64748b"];

@@ -79,7 +79,7 @@ export default function AuthPage() {
       const user     = payload.user;
       const company  = payload.company;
 
-      if (token)   localStorage.setItem("auth_token",   token);
+      if (token)   localStorage.setItem("admin_auth_token",   token);
       if (user)    localStorage.setItem("auth_user",    JSON.stringify(user));
       if (company) localStorage.setItem("auth_company", JSON.stringify(company));
       localStorage.setItem("auth_payload", JSON.stringify(res.data));

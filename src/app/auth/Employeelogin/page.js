@@ -4,7 +4,7 @@ import { useState } from "react";
 import axios from "axios";
 
 const BASE = axios.create({
-  baseURL: "https://sheet-scabbed-explain.ngrok-free.dev/api/auth",
+  baseURL: "https://api.pencilkraft.in/api/auth",
   headers: { "ngrok-skip-browser-warning": "true" },
 });
 
@@ -54,7 +54,7 @@ export default function AuthPage() {
       const company = payload.company;
 
       // ── Store in localStorage ──────────────────────────
-      if (token)   localStorage.setItem("auth_token",   token);
+      if (token)   localStorage.setItem("employee_auth_token",   token);
       if (user)    localStorage.setItem("auth_user",    JSON.stringify(user));
       if (company) localStorage.setItem("auth_company", JSON.stringify(company));
       localStorage.setItem("auth_payload", JSON.stringify(res.data));
