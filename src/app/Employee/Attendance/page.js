@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const BASE = process.env.NEXT_PUBLIC_API_URL;
+const BASE = "";
 const HEADERS = () => ({
   Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
