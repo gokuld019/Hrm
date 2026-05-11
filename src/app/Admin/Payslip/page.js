@@ -42,7 +42,7 @@ const ICONS = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BASE = "https://api.pencilkraft.in/api";
+const BASE = "https://pencilkraft.in/api";
 const NOW = new Date(), CUR_MONTH = NOW.getMonth() + 1, CUR_YEAR = NOW.getFullYear();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

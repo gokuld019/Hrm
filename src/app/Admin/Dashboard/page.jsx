@@ -68,7 +68,7 @@ function useDashboardStats() {
     setError(null);
     try {
       const token = localStorage.getItem("admin_auth_token");
-      const res = await fetch("https://api.pencilkraft.in/api/admin/dashboard/main-stats", {
+      const res = await fetch("https://pencilkraft.in/api/admin/dashboard/main-stats", {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE_URL = "https://api.pencilkraft.in/api";
+const BASE_URL = "https://pencilkraft.in/api";
 const ACCENT = "#f97316";
 
 const MONTH_MAP = {

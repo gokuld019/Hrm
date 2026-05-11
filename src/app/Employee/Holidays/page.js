@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const BASE = "https://api.pencilkraft.in/api/employee";
+const BASE = "https://pencilkraft.in/api/employee";
 
 function getToken() {
   if (typeof window === "undefined") return null;

@@ -17,6 +17,7 @@ const Ico = ({ d, size = 16, stroke = "currentColor", sw = 1.8, fill = "none", s
     {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p} />) : <path d={d} />}
   </svg>
 );
+
 const I = {
   arrowLeft:  "M19 12H5 M12 19l-7-7 7-7",
   search:     "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z",

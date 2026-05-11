@@ -4,7 +4,7 @@ import { useState } from "react";
 import axios from "axios";
 
 const BASE = axios.create({
-  baseURL: "https://api.pencilkraft.in/api/auth",
+  baseURL: "https://pencilkraft.in/api/auth",
   headers: { "ngrok-skip-browser-warning": "true" },
 });
 
