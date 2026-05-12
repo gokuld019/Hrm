@@ -16,7 +16,7 @@ import ProjectsPage from "../Projects/page";
 import TasksPage from "../Task/page";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BASE = process.env.NEXT_PUBLIC_API_URL;
+const BASE = "";
 const HEADERS = () => ({
   Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
@@ -702,6 +702,8 @@ export default function EmployeeDashboard() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(true);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [openPanel, setOpenPanel] = useState(null);
 
@@ -759,6 +761,86 @@ const navigate = (pg) => {
     }).finally(()=>setTasksLoading(false));
   }, []);
 
+  // Fetch team members (from the first project or a dedicated endpoint)
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      try {
+        // First, get the first project the employee is assigned to
+        const projectsRes = await fetch(`${BASE}/api/employee/projects`, { headers: HEADERS() });
+        const projectsJson = await projectsRes.json();
+        let projectsData = null;
+        
+        if (projectsJson.success && Array.isArray(projectsJson.data)) {
+          projectsData = projectsJson.data;
+        } else if (Array.isArray(projectsJson.data?.projects)) {
+          projectsData = projectsJson.data.projects;
+        } else if (Array.isArray(projectsJson)) {
+          projectsData = projectsJson;
+        }
+        
+        if (projectsData && projectsData.length > 0) {
+          const firstProjectId = projectsData[0].id || projectsData[0].project_id;
+          
+          if (firstProjectId) {
+            // Fetch project details including team members
+            const projectRes = await fetch(`${BASE}/api/employee/projects/${firstProjectId}`, { headers: HEADERS() });
+            const projectJson = await projectRes.json();
+            
+            if (projectJson.success && projectJson.data) {
+              const projectData = projectJson.data;
+              let members = [];
+              
+              // Extract team members based on the API response structure
+              if (projectData.team_members && Array.isArray(projectData.team_members)) {
+                members = projectData.team_members;
+              } else if (projectData.members && Array.isArray(projectData.members)) {
+                members = projectData.members;
+              } else if (projectData.employees && Array.isArray(projectData.employees)) {
+                members = projectData.employees;
+              } else if (projectData.team && Array.isArray(projectData.team)) {
+                members = projectData.team;
+              }
+              
+              // Map members to the expected format
+              const formattedMembers = members.map(member => ({
+                name: `${member.firstname || member.first_name || ''} ${member.lastname || member.last_name || ''}`.trim() || member.name || 'Team Member',
+                role: member.role || member.designation || member.position || 'Team Member',
+                color: avatarColor(member.name || `${member.firstname} ${member.lastname}`),
+                profile_image: member.profile_image,
+                id: member.id
+              }));
+              
+              setTeamMembers(formattedMembers);
+            }
+          }
+        }
+        
+        // If no team members found or no projects, try a separate team endpoint
+        if (teamMembers.length === 0) {
+          const teamRes = await fetch(`${BASE}/api/employee/team`, { headers: HEADERS() });
+          const teamJson = await teamRes.json();
+          
+          if (teamJson.success && Array.isArray(teamJson.data)) {
+            const formattedMembers = teamJson.data.map(member => ({
+              name: `${member.firstname || member.first_name || ''} ${member.lastname || member.last_name || ''}`.trim() || member.name || 'Team Member',
+              role: member.role || member.designation || member.position || 'Team Member',
+              color: avatarColor(member.name || `${member.firstname} ${member.lastname}`),
+              profile_image: member.profile_image,
+              id: member.id
+            }));
+            setTeamMembers(formattedMembers);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching team members:", error);
+      } finally {
+        setTeamMembersLoading(false);
+      }
+    };
+    
+    fetchTeamMembers();
+  }, []);
+
   const emp         = profile?.employee;
   const fullName    = profileLoading ? "Loading…" : emp ? `${emp.firstname} ${emp.lastname}` : "Employee";
   const designation = profile?.designation?.name??"Senior Product Designer";
@@ -776,12 +858,7 @@ const navigate = (pg) => {
     { name:"CSS",        date:"Updated · 12 May 2025", pct:79, color:"#3b82f6" },
     { name:"Javascript", date:"Updated · 13 May 2025", pct:52, color:"#f59e0b" },
   ];
-  const teamMembers = [
-    { name:"Alexander Jermai", role:"UI/UX Designer",  color:"#6366f1" },
-    { name:"Doglas Martini",   role:"Product Designer", color:"#f59e0b" },
-    { name:"Daniel Esbella",   role:"Project Manager",  color:"#22c55e" },
-    { name:"Stephan Perah",    role:"Team Lead",        color:"#8b5cf6" },
-  ];
+  
   const meetings = [
     { time:"09:25 AM", title:"Marketing Strategy Presentation", dot:"#ef4444" },
     { time:"09:20 AM", title:"Design Review Hospital Project",   dot:"#f59e0b" },
@@ -1008,17 +1085,23 @@ const navigate = (pg) => {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
           <span style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>Team Members</span>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-          {teamMembers.map((m,i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"#f9fafb", borderRadius:12, border:"1px solid #f1f5f9" }}>
-              <Avatar name={m.name} size={36} color={m.color} />
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:"#1e293b" }}>{m.name}</div>
-                <div style={{ fontSize:10, color:"#94a3b8" }}>{m.role}</div>
+        {teamMembersLoading ? (
+          <div style={{ textAlign:"center", padding:30 }}><Spinner /></div>
+        ) : teamMembers.length === 0 ? (
+          <div style={{ textAlign:"center", padding:20, color:"#94a3b8", fontSize:12 }}>No team members found</div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+            {teamMembers.map((m,i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"#f9fafb", borderRadius:12, border:"1px solid #f1f5f9" }}>
+                <Avatar name={m.name} size={36} color={m.color} img={m.profile_image} />
+                <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#1e293b" }}>{m.name}</div>
+                  <div style={{ fontSize:10, color:"#94a3b8" }}>{m.role}</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ textAlign:"center", fontSize:11, color:"#94a3b8", paddingTop:4 }}>
