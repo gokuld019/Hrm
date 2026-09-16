@@ -1,7 +1,11 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, RefreshCw, Star, Calendar, ChevronDown, CheckSquare, Square, X, Search, Loader2, CircleCheck, AlertTriangle, Building2, Hash, FileText, Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard, Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays } from "lucide-react";
-import confetti from "canvas-confetti";
+import { 
+  Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search, 
+  Loader2, CircleCheck, CircleAlert, AlertTriangle, TriangleAlert, Building2, Hash, FileText, 
+  Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard, 
+  Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays 
+} from "lucide-react";import confetti from "canvas-confetti";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 
