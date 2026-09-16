@@ -1,17 +1,20 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Ellipsis, RotateCcw, ChevronDown, ChevronUp, X, FolderUp,
   Search, PencilLine, Trash2, ScanEye, CircleCheck, CircleAlert,
   Loader2, TriangleAlert, ArrowRight, UserRoundCog, Users, Crown,
   CalendarDays, DollarSign, Tag as TagIcon, FileText, Hash,
-  Building2, CheckCheck, RotateCw, UserPlus
+  Building2, CheckCheck, RotateCw, UserPlus, MapPin, BadgeCheck,
+  CreditCard, TrendingUp, Download, ChevronLeft, ChevronRight, ArrowUpDown,
+  AlertTriangle, RefreshCw
 } from "lucide-react";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const palette = ["#6366f1","#14b8a6","#f97316","#ec4899","#22c55e","#a855f7","#eab308","#ef4444","#06b6d4"];
 const getColor = (i) => palette[i % palette.length];
+const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
 
 // ── Avatar ────────────────────────────────────────────────────────────
 const Avatar = ({ initials, color, size = "w-7 h-7" }) => (
@@ -260,60 +263,381 @@ function SuccessModal({ message, onClose }) {
   );
 }
 
-// ── ERROR MODAL ───────────────────────────────────────────────────────
-function ErrorModal({ message, onClose }) {
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm cursor-pointer" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-8 flex flex-col items-center text-center">
-        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="16" fill="#ef4444" fillOpacity="0.15" />
-            <path d="M11 11l10 10M21 11l-10 10" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-        </div>
-        <h3 className="text-base font-bold text-gray-900 mb-1">Something went wrong</h3>
-        <p className="text-sm text-gray-500 mb-5">{message}</p>
-        <button onClick={onClose} className="px-6 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition cursor-pointer">Close</button>
-      </div>
-    </div>
-  );
-}
+// ── CLIENT MODAL (For adding client inline) ─────────────────────────────────
+function ClientModal({ client, onClose, onSuccess }) {
+  const isEdit = !!client;
+  const [tab, setTab] = useState("basic");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [codeChecking, setCodeChecking] = useState(false);
+  const [codeError, setCodeError] = useState(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const debounceTimer = useRef(null);
 
-// ── CONFIRM DELETE MODAL ──────────────────────────────────────────────
-function ConfirmDeleteModal({ title, onConfirm, onClose, deleting }) {
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-6 flex flex-col items-center text-center">
-        <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
-          <Trash2 size={24} className="text-red-500" />
+  const [form, setForm] = useState(isEdit ? {
+    client_code: client.client_code || "",
+    company_name: client.company_name || "",
+    contact_person: client.contact_person || "",
+    email: client.email || "",
+    phone: client.phone || "",
+    alternative_phone: client.alternative_phone || "",
+    address: client.address || "",
+    city: client.city || "",
+    state: client.state || "",
+    zip_code: client.zip_code || "",
+    country: client.country || "India",
+    gst_number: client.gst_number || "",
+    pan_number: client.pan_number || "",
+    payment_terms: client.payment_terms || "net_30",
+    credit_limit: client.credit_limit || "",
+    notes: client.notes || "",
+    status: client.status || "active",
+  } : {
+    client_code: "", company_name: "", contact_person: "", email: "",
+    phone: "", alternative_phone: "",
+    address: "", city: "", state: "", zip_code: "", country: "India",
+    gst_number: "", pan_number: "",
+    payment_terms: "net_30", credit_limit: "",
+    notes: "", status: "active",
+  });
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (isEdit) return;
+    const autoGenCode = async () => {
+      setGeneratingCode(true);
+      try {
+        const token = localStorage.getItem("admin_auth_token");
+        const res = await fetch(`${BASE}/api/admin/clients/next-code`, {
+          headers: { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "true" }
+        });
+        const data = await res.json();
+        if (data.success && data.next_client_code) {
+          set("client_code", data.next_client_code);
+        }
+      } catch (err) {
+        console.error("Auto-generate client code failed:", err);
+      } finally {
+        setGeneratingCode(false);
+      }
+    };
+    autoGenCode();
+  }, []);
+
+  const checkClientCode = useCallback(async (code) => {
+    if (!code || code.trim() === "") { setCodeError(null); return true; }
+    if (isEdit && code === client.client_code) { setCodeError(null); return true; }
+    setCodeChecking(true); setCodeError(null);
+    try {
+      const token = localStorage.getItem("admin_auth_token");
+      const res = await fetch(`${BASE}/api/admin/clients/check-code`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body: JSON.stringify({ client_code: code.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Code check failed");
+      if (data.exists === true) { setCodeError(data.message || "Client code already taken"); return false; }
+      setCodeError(null); return true;
+    } catch (err) { setCodeError(err.message || "Could not verify code"); return false; }
+    finally { setCodeChecking(false); }
+  }, [isEdit, client]);
+
+  const handleCodeChange = (e) => {
+    const newCode = e.target.value;
+    set("client_code", newCode);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => checkClientCode(newCode), 500);
+  };
+
+  const isValid = () => {
+    if (!form.company_name.trim()) return false;
+    if (form.client_code && form.client_code.trim() !== "" && codeError) return false;
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!isValid()) { if (!form.company_name.trim()) setTab("basic"); return; }
+    setSaving(true); setSaveError(null);
+    try {
+      const token = localStorage.getItem("admin_auth_token");
+      const url = isEdit ? `${BASE}/api/admin/clients/${client.id}` : `${BASE}/api/admin/clients`;
+      const method = isEdit ? "PUT" : "POST";
+      const payload = { ...form, credit_limit: form.credit_limit ? Number(form.credit_limit) : null };
+      const res = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || (data?.errors ? Object.values(data.errors).flat().join(" • ") : `Error ${res.status}`));
+      onSuccess?.(data, isEdit ? "Client updated successfully!" : "Client created successfully!");
+      onClose();
+    } catch (err) { setSaveError(err.message || "Failed to save."); }
+    finally { setSaving(false); }
+  };
+
+  const TABS = [
+    { key: "basic", label: "Basic Info", Icon: Building2 },
+    { key: "address", label: "Address", Icon: MapPin },
+    { key: "tax", label: "Tax & Business", Icon: BadgeCheck },
+    { key: "billing", label: "Billing", Icon: CreditCard },
+    { key: "notes", label: "Notes & Status", Icon: FileText },
+  ];
+
+  const currentTabIdx = TABS.findIndex(t => t.key === tab);
+  const inputCls = "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition text-gray-800 bg-white placeholder:text-gray-400";
+  const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5";
+
+  const renderTabContent = () => {
+    switch (tab) {
+      case "basic": return (
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Company & Contact</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Company Name <span className="text-red-500">*</span></label>
+              <input value={form.company_name} onChange={e => set("company_name", e.target.value)} placeholder="Acme Corp" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Client Code</label>
+              <div className="relative">
+                <input
+                  value={generatingCode ? "Generating..." : form.client_code}
+                  readOnly
+                  className={`${inputCls} bg-gray-50 text-gray-400 cursor-not-allowed select-none`}
+                />
+                {generatingCode && (
+                  <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Contact Person</label>
+              <input value={form.contact_person} onChange={e => set("contact_person", e.target.value)} placeholder="Full name" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Email</label>
+              <input type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" className={inputCls} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="+91 00000 00000" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Alternative Phone(optional)</label>
+              <input type="tel" value={form.alternative_phone} onChange={e => set("alternative_phone", e.target.value)} placeholder="+91 00000 00000" className={inputCls} />
+            </div>
+          </div>
         </div>
-        <h3 className="text-base font-bold text-gray-900 mb-1">Delete Project</h3>
-        <p className="text-sm text-gray-500 mb-1">Are you sure you want to delete</p>
-        <p className="text-sm font-semibold text-gray-800 mb-2">"{title}"?</p>
-        <p className="text-xs text-red-500 mb-6">This action cannot be undone.</p>
-        <div className="flex gap-3 w-full">
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer">Cancel</button>
-          <button onClick={onConfirm} disabled={deleting}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-60 cursor-pointer">
-            {deleting ? <><Loader2 size={14} className="animate-spin" />Deleting…</> : <><Trash2 size={14} />Delete</>}
+      );
+
+      case "address": return (
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Address Details</p>
+          <div>
+            <label className={labelCls}>Address</label>
+            <textarea value={form.address} onChange={e => set("address", e.target.value)} rows={3}
+              placeholder="Street address, building, floor…" className={`${inputCls} resize-none`} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className={labelCls}>City</label><input value={form.city} onChange={e => set("city", e.target.value)} placeholder="Type city" className={inputCls} /></div>
+            <div><label className={labelCls}>State</label><input value={form.state} onChange={e => set("state", e.target.value)} placeholder="Type state" className={inputCls} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className={labelCls}>ZIP / Postal Code</label><input value={form.zip_code} onChange={e => set("zip_code", e.target.value)} placeholder="******" className={inputCls} /></div>
+            <div><label className={labelCls}>Country</label><input value={form.country} onChange={e => set("country", e.target.value)} placeholder="Country" className={inputCls} /></div>
+          </div>
+        </div>
+      );
+
+      case "tax": return (
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Tax & Business Details</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>GST Number(optional)</label>
+              <input value={form.gst_number} onChange={e => set("gst_number", e.target.value.toUpperCase())}
+                placeholder="22AAAAA0000A1Z5" maxLength={15} className={inputCls} />
+              <p className="text-[10px] text-gray-400 mt-1">15-character GSTIN</p>
+            </div>
+            <div>
+              <label className={labelCls}>PAN Number(optional)</label>
+              <input value={form.pan_number} onChange={e => set("pan_number", e.target.value.toUpperCase())}
+                placeholder="AAAAA0000A" maxLength={10} className={inputCls} />
+              <p className="text-[10px] text-gray-400 mt-1">10-character PAN</p>
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+            <p className="text-[11px] font-semibold text-amber-700 mb-1">Important</p>
+            <p className="text-[11px] text-amber-600">GST and PAN numbers are used for invoicing and compliance. Ensure they match your client's official documents.</p>
+          </div>
+        </div>
+      );
+
+      case "billing": return (
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Billing & Payment Terms</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Payment Terms</label>
+              <div className="relative">
+                <select value={form.payment_terms} onChange={e => set("payment_terms", e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 appearance-none bg-white transition text-gray-700">
+                  <option value="immediate">Immediate</option>
+                  <option value="net_15">Net 15</option>
+                  <option value="net_30">Net 30</option>
+                  <option value="net_45">Net 45</option>
+                  <option value="net_60">Net 60</option>
+                </select>
+                <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Credit Limit (₹)</label>
+              <input type="number" min="0" value={form.credit_limit} onChange={e => set("credit_limit", e.target.value)}
+                placeholder="e.g. 100000" className={inputCls} />
+              <p className="text-[10px] text-gray-400 mt-1">Leave blank for no limit</p>
+            </div>
+          </div>
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <p className="text-[11px] font-semibold text-blue-700 mb-2">Payment Terms Reference</p>
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-[10px] text-blue-600">
+              {[
+                ["Immediate", "Due on receipt"],
+                ["Net 15", "Due in 15 days"],
+                ["Net 30", "Due in 30 days"],
+                ["Net 45", "Due in 45 days"],
+                ["Net 60", "Due in 60 days"],
+              ].map(([t, d]) => (
+                <div key={t} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                  <span><span className="font-semibold">{t}:</span> {d}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+
+      case "notes": return (
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Notes & Status</p>
+          <div>
+            <label className={labelCls}>Status</label>
+            <div className="flex items-center gap-3">
+              {["active", "inactive"].map(s => (
+                <label key={s}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border cursor-pointer transition text-sm font-medium select-none
+                    ${form.status === s
+                      ? s === "active"
+                        ? "border-green-400 bg-green-50 text-green-700"
+                        : "border-red-300 bg-red-50 text-red-600"
+                      : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                  <input type="radio" name="status" value={s} checked={form.status === s}
+                    onChange={() => set("status", s)} className="sr-only" />
+                  <span className={`w-2 h-2 rounded-full ${form.status === s ? (s === "active" ? "bg-green-500" : "bg-red-400") : "bg-gray-300"}`} />
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Notes</label>
+            <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={6}
+              placeholder="Any additional notes about this client…" className={`${inputCls} resize-none`} />
+          </div>
+        </div>
+      );
+
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 z-10 flex flex-col max-h-[92vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">
+              {isEdit ? `Edit Client` : "Add New Client"}
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {isEdit ? "Update client information below" : "Fill in the details to create a new client"}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition">
+            <X size={15} />
           </button>
         </div>
+
+        <div className="flex border-b border-gray-100 shrink-0 px-2 overflow-x-auto">
+          {TABS.map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors
+                ${tab === key ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+              <Icon size={12} />{label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto px-6 py-5 flex-1">
+          {saveError && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 mb-4">
+              <AlertTriangle size={13} className="shrink-0 mt-0.5" /><span>{saveError}</span>
+            </div>
+          )}
+          {renderTabContent()}
+        </div>
+
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+          <div className="flex items-center gap-1.5">
+            {TABS.map(({ key }) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`h-2 rounded-full transition-all ${tab === key ? "bg-orange-500 w-4" : "bg-gray-200 hover:bg-gray-300 w-2"}`} />
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setTab(TABS[currentTabIdx - 1].key)} disabled={currentTabIdx === 0}
+              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition">
+              ← Prev
+            </button>
+            <button onClick={() => setTab(TABS[currentTabIdx + 1].key)} disabled={currentTabIdx === TABS.length - 1}
+              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition">
+              Next →
+            </button>
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving || !isValid() || codeChecking || generatingCode}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+              {saving
+                ? <><Loader2 size={14} className="animate-spin" />{isEdit ? "Updating…" : "Saving…"}</>
+                : isEdit
+                  ? <><PencilLine size={14} />Update Client</>
+                  : <><UserPlus size={14} />Save Client</>
+              }
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── ADD PROJECT MODAL ─────────────────────────────────────────────────
+// ── ADD PROJECT MODAL (UPDATED - FIXED MODAL STACKING) ─────────────────────────────────────────────────
 function AddProjectModal({ onClose, onSuccess }) {
   const [tab, setTab] = useState("basic");
   const [projectName, setProjectName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [priority, setPriority] = useState("");
-  const [value, setValue] = useState("");
-  const [priceType, setPriceType] = useState("");
   const [description, setDescription] = useState("");
   const [projectCode, setProjectCode] = useState("");
   const [codeCheckStatus, setCodeCheckStatus] = useState(null);
@@ -332,6 +656,8 @@ function AddProjectModal({ onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [apiErrors, setApiErrors] = useState({});
   const [inlineError, setInlineError] = useState(null);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [clientSuccessMsg, setClientSuccessMsg] = useState(null);
 
   const isFormValid =
     projectName.trim() !== "" &&
@@ -440,6 +766,12 @@ function AddProjectModal({ onClose, onSuccess }) {
     finally { setCodeChecking(false); }
   };
 
+  const handleClientAdded = () => {
+    fetchClients();
+    setClientSuccessMsg("Client created successfully!");
+    setTimeout(() => setClientSuccessMsg(null), 2500);
+  };
+
   const handleSave = async () => {
     setApiErrors({}); setInlineError(null);
     const errors = { teamLeader: !teamLeaderId, projectManager: !projectManagerId };
@@ -451,7 +783,7 @@ function AddProjectModal({ onClose, onSuccess }) {
     }
     if (!projectName.trim()) { setInlineError("Project Name is required."); return; }
     if (!projectCode.trim()) { setInlineError("Project Code is required."); return; }
-    if (!selectedClientId)   { setInlineError("Please select a client."); return; }
+    if (!selectedClientId) { setInlineError("Please select a client."); return; }
 
     setSubmitting(true);
     try {
@@ -466,8 +798,6 @@ function AddProjectModal({ onClose, onSuccess }) {
         start_date: startDate || null,
         end_date: endDate || null,
         priority: priorityValue,
-        value: value ? parseFloat(value) : null,
-        type: priceType ? priceType.toLowerCase() : "fixed",
         description: description || null,
         project_manager_id: projectManagerId ? parseInt(projectManagerId) : null,
         team_leader_id: teamLeaderId ? parseInt(teamLeaderId) : null,
@@ -496,324 +826,345 @@ function AddProjectModal({ onClose, onSuccess }) {
   const inputCls = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 text-black transition-all bg-white cursor-text";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }}>
+    <>
+      {/* Main Add Project Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-gray-800">Add Project</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Fill in the details to create a new project</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 cursor-pointer transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-6 shrink-0 bg-gray-50/40">
-          {[["basic","basic"],["members","members"]].map(([t]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`py-3 px-4 text-sm font-semibold border-b-2 transition-colors -mb-px cursor-pointer flex items-center gap-1.5
-                ${tab === t ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              {t === "basic" ? <><FileText size={13} />Basic Info</> : <><Users size={13} />Members</>}
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-gray-800">Add Project</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Fill in the details to create a new project</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 cursor-pointer transition-colors">
+              <X size={16} />
             </button>
-          ))}
-          <div className="ml-auto flex items-center gap-1.5 pr-1">
-            {["basic","members"].map((t) => (
-              <div key={t} className={`w-2 h-2 rounded-full transition-colors ${tab === t ? "bg-orange-500" : "bg-gray-200"}`} />
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-gray-100 px-6 shrink-0 bg-gray-50/40">
+            {[["basic","basic"],["members","members"]].map(([t]) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`py-3 px-4 text-sm font-semibold border-b-2 transition-colors -mb-px cursor-pointer flex items-center gap-1.5
+                  ${tab === t ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+                {t === "basic" ? <><FileText size={13} />Basic Info</> : <><Users size={13} />Members</>}
+              </button>
             ))}
+            <div className="ml-auto flex items-center gap-1.5 pr-1">
+              {["basic","members"].map((t) => (
+                <div key={t} className={`w-2 h-2 rounded-full transition-colors ${tab === t ? "bg-orange-500" : "bg-gray-200"}`} />
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Inline error */}
-        {inlineError && (
-          <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 shrink-0">
-            <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{inlineError}</span>
-          </div>
-        )}
+          {/* Inline error */}
+          {inlineError && (
+            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 shrink-0">
+              <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{inlineError}</span>
+            </div>
+          )}
 
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+          {/* Client success message */}
+          {clientSuccessMsg && (
+            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-600 shrink-0">
+              <CircleCheck size={13} className="shrink-0 mt-0.5" /><span>{clientSuccessMsg}</span>
+            </div>
+          )}
 
-          {tab === "basic" && (
-            <>
-              {/* Project Code */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                  <Hash size={11} className="text-gray-400" /> Project Code <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <input
-                      value={generatingCode ? "Generating..." : projectCode}
-                      onChange={e => { setProjectCode(e.target.value.toUpperCase()); setCodeCheckStatus(null); }}
-                      className={`${inputCls} font-mono bg-gray-50`}
-                      placeholder="Auto-generated"
-                      readOnly={generatingCode}
-                    />
-                    {generatingCode && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />}
-                  </div>
-                  <button onClick={regenerateCode} disabled={generatingCode}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200 disabled:opacity-50 whitespace-nowrap font-medium cursor-pointer transition-colors">
-                    <RotateCw size={13} /> New
-                  </button>
-                  <button onClick={checkProjectCode} disabled={codeChecking || !projectCode}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 text-orange-600 border border-orange-200 rounded-xl text-sm hover:bg-orange-100 disabled:opacity-50 font-medium cursor-pointer transition-colors">
-                    {codeChecking ? <Loader2 size={14} className="animate-spin" /> : <CircleCheck size={13} />}
-                    Check
-                  </button>
-                </div>
-                {codeCheckStatus && (
-                  <div className={`mt-1.5 text-xs flex items-center gap-1 ${codeCheckStatus.type === "success" ? "text-green-600" : "text-red-500"}`}>
-                    {codeCheckStatus.type === "success" ? <CircleCheck size={12} /> : <CircleAlert size={12} />}
-                    {codeCheckStatus.message}
-                  </div>
-                )}
-                {apiErrors.project_code && <p className="text-red-500 text-xs mt-1">{apiErrors.project_code[0]}</p>}
-              </div>
+          {/* Body */}
+          <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
 
-              {/* Project Name */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                  <FileText size={11} className="text-gray-400" /> Project Name <span className="text-red-500">*</span>
-                </label>
-                <input value={projectName} onChange={e => setProjectName(e.target.value)}
-                  className={inputCls} placeholder="Enter project name" />
-                {apiErrors.project_name && <p className="text-red-500 text-xs mt-1">{apiErrors.project_name[0]}</p>}
-              </div>
-
-              {/* Client */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                  <Building2 size={11} className="text-gray-400" /> Client <span className="text-red-500">*</span>
-                </label>
-                <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} disabled={loadingClients}
-                  className={`${inputCls} cursor-pointer`}>
-                  <option value="">{loadingClients ? "Loading clients..." : "Select a client"}</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.company_name} ({c.client_code})</option>)}
-                </select>
-                {apiErrors.client_id && <p className="text-red-500 text-xs mt-1">{apiErrors.client_id[0]}</p>}
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+            {tab === "basic" && (
+              <>
+                {/* Project Code */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <CalendarDays size={11} className="text-gray-400" /> Start Date
+                    <Hash size={11} className="text-gray-400" /> Project Code <span className="text-red-500">*</span>
                   </label>
-                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        value={generatingCode ? "Generating..." : projectCode}
+                        onChange={e => { setProjectCode(e.target.value.toUpperCase()); setCodeCheckStatus(null); }}
+                        className={`${inputCls} font-mono bg-gray-50`}
+                        placeholder="Auto-generated"
+                        readOnly={generatingCode}
+                      />
+                      {generatingCode && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />}
+                    </div>
+                    <button onClick={regenerateCode} disabled={generatingCode}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200 disabled:opacity-50 whitespace-nowrap font-medium cursor-pointer transition-colors">
+                      <RotateCw size={13} /> New
+                    </button>
+                    <button onClick={checkProjectCode} disabled={codeChecking || !projectCode}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 text-orange-600 border border-orange-200 rounded-xl text-sm hover:bg-orange-100 disabled:opacity-50 font-medium cursor-pointer transition-colors">
+                      {codeChecking ? <Loader2 size={14} className="animate-spin" /> : <CircleCheck size={13} />}
+                      Check
+                    </button>
+                  </div>
+                  {codeCheckStatus && (
+                    <div className={`mt-1.5 text-xs flex items-center gap-1 ${codeCheckStatus.type === "success" ? "text-green-600" : "text-red-500"}`}>
+                      {codeCheckStatus.type === "success" ? <CircleCheck size={12} /> : <CircleAlert size={12} />}
+                      {codeCheckStatus.message}
+                    </div>
+                  )}
+                  {apiErrors.project_code && <p className="text-red-500 text-xs mt-1">{apiErrors.project_code[0]}</p>}
                 </div>
+
+                {/* Project Name */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <CalendarDays size={11} className="text-gray-400" /> End Date
+                    <FileText size={11} className="text-gray-400" /> Project Name <span className="text-red-500">*</span>
                   </label>
-                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+                  <input value={projectName} onChange={e => setProjectName(e.target.value)}
+                    className={inputCls} placeholder="Enter project name" />
+                  {apiErrors.project_name && <p className="text-red-500 text-xs mt-1">{apiErrors.project_name[0]}</p>}
                 </div>
-              </div>
 
-              {/* Priority, Value, Type */}
-              <div className="grid grid-cols-3 gap-3">
+                {/* Client with Add Button */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
+                    <Building2 size={11} className="text-gray-400" /> Client <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <select 
+                        value={selectedClientId} 
+                        onChange={e => setSelectedClientId(e.target.value)} 
+                        disabled={loadingClients}
+                        className={`${inputCls} cursor-pointer`}
+                      >
+                        <option value="">{loadingClients ? "Loading clients..." : "Select a client"}</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.company_name} ({c.client_code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowClientModal(true)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <UserPlus size={14} /> Add Client
+                    </button>
+                  </div>
+                  {apiErrors.client_id && <p className="text-red-500 text-xs mt-1">{apiErrors.client_id[0]}</p>}
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
+                      <CalendarDays size={11} className="text-gray-400" /> Start Date
+                    </label>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
+                      <CalendarDays size={11} className="text-gray-400" /> End Date
+                    </label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+                  </div>
+                </div>
+
+                {/* Priority only - Value and Price Type removed */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
                     <TagIcon size={11} className="text-gray-400" /> Priority
                   </label>
                   <select value={priority} onChange={e => setPriority(e.target.value)} className={`${inputCls} cursor-pointer`}>
-                    <option value="">Select</option>
+                    <option value="">Select Priority</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
                     <option value="Low">Low</option>
                     <option value="Urgent">Urgent</option>
                   </select>
                 </div>
+
+                {/* Description */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <DollarSign size={11} className="text-gray-400" /> Value
-                  </label>
-                  <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-                    <span className="px-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 py-2.5">$</span>
-                    <input value={value} onChange={e => setValue(e.target.value)} type="number"
-                      className="flex-1 px-2 py-2.5 text-sm outline-none text-black cursor-text" placeholder="0" />
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+                    className={`${inputCls} resize-none`} placeholder="Add a brief description..." />
+                </div>
+
+                {/* Nudge */}
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                    <Users size={15} className="text-orange-500" />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Price Type</label>
-                  <select value={priceType} onChange={e => setPriceType(e.target.value)} className={`${inputCls} cursor-pointer`}>
-                    <option value="">Select</option>
-                    <option value="fixed">Fixed</option>
-                    <option value="hourly">Hourly</option>
-                    <option value="retainer">Retainer</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-                  className={`${inputCls} resize-none`} placeholder="Add a brief description..." />
-              </div>
-
-              {/* Nudge */}
-              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                  <Users size={15} className="text-orange-500" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-orange-700">Don't forget team members!</p>
-                  <p className="text-[11px] text-orange-500">Assign a manager, leader & team in the Members tab.</p>
-                </div>
-                <button onClick={() => setTab("members")}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 shrink-0 transition-colors cursor-pointer">
-                  Next <ArrowRight size={12} />
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* MEMBERS TAB */}
-          {tab === "members" && (
-            <div className="space-y-5">
-              {membersError && (
-                <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-xs flex items-center gap-2">
-                  <TriangleAlert size={13} />
-                  <span className="flex-1">{membersError}</span>
-                  <button onClick={fetchMembersData} className="underline font-medium cursor-pointer">Retry</button>
-                </div>
-              )}
-
-              {loadingMembers ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
-                  <Loader2 size={24} className="animate-spin text-orange-400" />
-                  <span className="text-sm">Loading employees...</span>
-                </div>
-              ) : (
-                <>
-                  {/* Project Manager */}
-                  <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
-                        <UserRoundCog size={14} className="text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-700">Project Manager <span className="text-red-500">*</span></p>
-                        <p className="text-[11px] text-gray-400">Oversees the project & reports to stakeholders</p>
-                      </div>
-                    </div>
-                    <SearchableSelect
-                      options={memberOptions.projectManagers}
-                      value={projectManagerId}
-                      onChange={setProjectManagerId}
-                      placeholder="Search & select project manager..."
-                      error={validationErrors.projectManager}
-                    />
-                    {memberOptions.projectManagers.length === 0 && (
-                      <p className="text-[11px] text-amber-500 mt-1.5 flex items-center gap-1"><TriangleAlert size={10} /> No project managers found</p>
-                    )}
+                  <div className="flex-1">
+                    <p className="text-xs font-semibold text-orange-700">Don't forget team members!</p>
+                    <p className="text-[11px] text-orange-500">Assign a manager, leader & team in the Members tab.</p>
                   </div>
+                  <button onClick={() => setTab("members")}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 shrink-0 transition-colors cursor-pointer">
+                    Next <ArrowRight size={12} />
+                  </button>
+                </div>
+              </>
+            )}
 
-                  {/* Team Leader */}
-                  <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                        <Crown size={14} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-700">Team Leader <span className="text-red-500">*</span></p>
-                        <p className="text-[11px] text-gray-400">Leads the day-to-day work of the team</p>
-                      </div>
-                    </div>
-                    <SearchableSelect
-                      options={memberOptions.teamLeaders}
-                      value={teamLeaderId}
-                      onChange={setTeamLeaderId}
-                      placeholder="Search & select team leader..."
-                      error={validationErrors.teamLeader}
-                    />
-                    {memberOptions.teamLeaders.length === 0 && (
-                      <p className="text-[11px] text-amber-500 mt-1.5 flex items-center gap-1"><TriangleAlert size={10} /> No team leaders found</p>
-                    )}
+            {/* MEMBERS TAB */}
+            {tab === "members" && (
+              <div className="space-y-5">
+                {membersError && (
+                  <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-xs flex items-center gap-2">
+                    <TriangleAlert size={13} />
+                    <span className="flex-1">{membersError}</span>
+                    <button onClick={fetchMembersData} className="underline font-medium cursor-pointer">Retry</button>
                   </div>
+                )}
 
-                  {/* Team Members */}
-                  <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
-                          <Users size={14} className="text-orange-500" />
+                {loadingMembers ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+                    <Loader2 size={24} className="animate-spin text-orange-400" />
+                    <span className="text-sm">Loading employees...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Project Manager */}
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
+                          <UserRoundCog size={14} className="text-green-600" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-gray-700">Team Members</p>
-                          <p className="text-[11px] text-gray-400">Select one or more members</p>
+                          <p className="text-xs font-bold text-gray-700">Project Manager <span className="text-red-500">*</span></p>
+                          <p className="text-[11px] text-gray-400">Oversees the project & reports to stakeholders</p>
                         </div>
                       </div>
-                      {teamMembers.length > 0 && (
-                        <span className="text-[11px] text-orange-500 font-semibold bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
-                          {teamMembers.length} selected
-                        </span>
+                      <SearchableSelect
+                        options={memberOptions.projectManagers}
+                        value={projectManagerId}
+                        onChange={setProjectManagerId}
+                        placeholder="Search & select project manager..."
+                        error={validationErrors.projectManager}
+                      />
+                      {memberOptions.projectManagers.length === 0 && (
+                        <p className="text-[11px] text-amber-500 mt-1.5 flex items-center gap-1"><TriangleAlert size={10} /> No project managers found</p>
                       )}
                     </div>
-                    <UserMultiSelect
-                      options={memberOptions.teamMembers}
-                      selected={teamMembers}
-                      onChange={setTeamMembers}
-                      placeholder="Click to select team members..."
-                    />
-                  </div>
 
-                  {/* Summary */}
-                  {(projectManagerId || teamLeaderId || teamMembers.length > 0) && (
-                    <div className="bg-gradient-to-br from-gray-50 to-orange-50/30 border border-gray-200 rounded-xl p-3 space-y-2">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Team Summary</p>
-                      {projectManagerId && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <UserRoundCog size={11} className="text-green-500 shrink-0" />
-                          <span className="text-gray-500 w-14 shrink-0">Manager</span>
-                          <span className="font-semibold text-gray-700">{memberOptions.projectManagers.find(m => m.id === projectManagerId)?.name}</span>
+                    {/* Team Leader */}
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Crown size={14} className="text-blue-600" />
                         </div>
-                      )}
-                      {teamLeaderId && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <Crown size={11} className="text-blue-500 shrink-0" />
-                          <span className="text-gray-500 w-14 shrink-0">Leader</span>
-                          <span className="font-semibold text-gray-700">{memberOptions.teamLeaders.find(m => m.id === teamLeaderId)?.name}</span>
+                        <div>
+                          <p className="text-xs font-bold text-gray-700">Team Leader <span className="text-red-500">*</span></p>
+                          <p className="text-[11px] text-gray-400">Leads the day-to-day work of the team</p>
                         </div>
-                      )}
-                      {teamMembers.length > 0 && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <Users size={11} className="text-orange-500 shrink-0" />
-                          <span className="text-gray-500 w-14 shrink-0">Members</span>
-                          <span className="font-semibold text-gray-700">{teamMembers.length} assigned</span>
-                        </div>
+                      </div>
+                      <SearchableSelect
+                        options={memberOptions.teamLeaders}
+                        value={teamLeaderId}
+                        onChange={setTeamLeaderId}
+                        placeholder="Search & select team leader..."
+                        error={validationErrors.teamLeader}
+                      />
+                      {memberOptions.teamLeaders.length === 0 && (
+                        <p className="text-[11px] text-amber-500 mt-1.5 flex items-center gap-1"><TriangleAlert size={10} /> No team leaders found</p>
                       )}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 shrink-0 bg-gray-50/50">
-          <button onClick={onClose} className="px-5 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">
-            Cancel
-          </button>
-          <div className="flex items-center gap-2">
-            {tab === "basic" && (
-              <button onClick={() => setTab("members")}
-                className="flex items-center gap-1.5 px-5 py-2 border border-orange-200 text-orange-600 rounded-xl text-sm font-semibold hover:bg-orange-50 transition cursor-pointer">
-                Members <ArrowRight size={13} />
-              </button>
+                    {/* Team Members */}
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
+                            <Users size={14} className="text-orange-500" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-700">Team Members</p>
+                            <p className="text-[11px] text-gray-400">Select one or more members</p>
+                          </div>
+                        </div>
+                        {teamMembers.length > 0 && (
+                          <span className="text-[11px] text-orange-500 font-semibold bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
+                            {teamMembers.length} selected
+                          </span>
+                        )}
+                      </div>
+                      <UserMultiSelect
+                        options={memberOptions.teamMembers}
+                        selected={teamMembers}
+                        onChange={setTeamMembers}
+                        placeholder="Click to select team members..."
+                      />
+                    </div>
+
+                    {/* Summary */}
+                    {(projectManagerId || teamLeaderId || teamMembers.length > 0) && (
+                      <div className="bg-gradient-to-br from-gray-50 to-orange-50/30 border border-gray-200 rounded-xl p-3 space-y-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Team Summary</p>
+                        {projectManagerId && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <UserRoundCog size={11} className="text-green-500 shrink-0" />
+                            <span className="text-gray-500 w-14 shrink-0">Manager</span>
+                            <span className="font-semibold text-gray-700">{memberOptions.projectManagers.find(m => m.id === projectManagerId)?.name}</span>
+                          </div>
+                        )}
+                        {teamLeaderId && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Crown size={11} className="text-blue-500 shrink-0" />
+                            <span className="text-gray-500 w-14 shrink-0">Leader</span>
+                            <span className="font-semibold text-gray-700">{memberOptions.teamLeaders.find(m => m.id === teamLeaderId)?.name}</span>
+                          </div>
+                        )}
+                        {teamMembers.length > 0 && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Users size={11} className="text-orange-500 shrink-0" />
+                            <span className="text-gray-500 w-14 shrink-0">Members</span>
+                            <span className="font-semibold text-gray-700">{teamMembers.length} assigned</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
-            <button onClick={handleSave} disabled={submitting || !isFormValid}
-              className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer">
-              {submitting ? <><Loader2 size={14} className="animate-spin" />Creating...</> : <><CircleCheck size={14} /> Create Project</>}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 shrink-0 bg-gray-50/50">
+            <button onClick={onClose} className="px-5 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">
+              Cancel
             </button>
+            <div className="flex items-center gap-2">
+              {tab === "basic" && (
+                <button onClick={() => setTab("members")}
+                  className="flex items-center gap-1.5 px-5 py-2 border border-orange-200 text-orange-600 rounded-xl text-sm font-semibold hover:bg-orange-50 transition cursor-pointer">
+                  Members <ArrowRight size={13} />
+                </button>
+              )}
+              <button onClick={handleSave} disabled={submitting || !isFormValid}
+                className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer">
+                {submitting ? <><Loader2 size={14} className="animate-spin" />Creating...</> : <><CircleCheck size={14} /> Create Project</>}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Client Modal - Rendered outside the main modal with higher z-index */}
+      {showClientModal && (
+        <div className="fixed inset-0 z-[100]">
+          <ClientModal
+            onClose={() => setShowClientModal(false)}
+            onSuccess={(data, msg) => {
+              handleClientAdded();
+              setShowClientModal(false);
+            }}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -857,8 +1208,6 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
           start_date: project.start_date || "",
           end_date: project.end_date || "",
           priority: project.priority || "",
-          value: project.value || "",
-          type: project.type || "",
           description: project.description || ""
         });
         setSelectedClientId(project.client_id || "");
@@ -904,8 +1253,6 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
         priority: formData.priority ? formData.priority.toLowerCase() : null,
-        value: formData.value ? parseFloat(formData.value) : null,
-        type: formData.type ? formData.type.toLowerCase() : "fixed",
         description: formData.description || null,
         project_manager_id: projectManagerId ? parseInt(projectManagerId) : null,
         team_leader_id: teamLeaderId ? parseInt(teamLeaderId) : null,
@@ -931,7 +1278,7 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
   };
 
   const field = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all text-black bg-white";
-  const lbl   = "block text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5";
+  const lbl = "block text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5";
 
   if (loading) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -942,7 +1289,6 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }}>
-
         <div className="px-6 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between">
             <div>
@@ -1004,30 +1350,15 @@ function EditProjectModal({ projectId, onClose, onSuccess }) {
                   <input type="date" value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} className={`${field} cursor-pointer`} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={lbl}>Priority</label>
-                  <select value={formData.priority} onChange={e => setFormData({ ...formData, priority: e.target.value })} className={`${field} cursor-pointer`}>
-                    <option value="">—</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={lbl}>Value ($)</label>
-                  <input type="number" value={formData.value} onChange={e => setFormData({ ...formData, value: e.target.value })} placeholder="0" className={`${field} cursor-text`} />
-                </div>
-                <div>
-                  <label className={lbl}>Type</label>
-                  <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} className={`${field} cursor-pointer`}>
-                    <option value="">—</option>
-                    <option value="fixed">Fixed</option>
-                    <option value="hourly">Hourly</option>
-                    <option value="retainer">Retainer</option>
-                  </select>
-                </div>
+              <div>
+                <label className={lbl}>Priority</label>
+                <select value={formData.priority} onChange={e => setFormData({ ...formData, priority: e.target.value })} className={`${field} cursor-pointer`}>
+                  <option value="">—</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                  <option value="urgent">Urgent</option>
+                </select>
               </div>
               <div>
                 <label className={lbl}>Description</label>
@@ -1179,7 +1510,6 @@ function ViewProjectModal({ projectId, onClose, onRefresh }) {
               <div className="flex items-center gap-2"><CalendarDays size={13} className="text-gray-400" /><span className="font-semibold text-gray-700">Start:</span> <span className="text-black">{project.start_date || "—"}</span></div>
               <div className="flex items-center gap-2"><CalendarDays size={13} className="text-gray-400" /><span className="font-semibold text-gray-700">End:</span> <span className="text-black">{project.end_date || "—"}</span></div>
               <div className="flex items-center gap-2"><TagIcon size={13} className="text-gray-400" /><span className="font-semibold text-gray-700">Priority:</span> <span className="text-black capitalize">{project.priority || "—"}</span></div>
-              <div className="flex items-center gap-2"><DollarSign size={13} className="text-gray-400" /><span className="font-semibold text-gray-700">Value:</span> <span className="text-black">{project.value ? `$${project.value}` : "—"}</span></div>
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-1"><FileText size={13} className="text-gray-400" /><span className="font-semibold text-gray-700 text-sm">Description</span></div>
@@ -1217,15 +1547,36 @@ function ViewProjectModal({ projectId, onClose, onRefresh }) {
         </div>
       </div>
       {confirmRemove && (
-        <ConfirmDeleteModal
-          title={`Remove ${confirmRemove.name} from this project?`}
-          onConfirm={() => removeTeamMember(confirmRemove.id)}
-          onClose={() => setConfirmRemove(null)}
-          deleting={false}
-        />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmRemove(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-6 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+              <Trash2 size={24} className="text-red-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Remove Member</h3>
+            <p className="text-sm text-gray-500 mb-1">Are you sure you want to remove</p>
+            <p className="text-sm font-semibold text-gray-800 mb-2">"{confirmRemove.name}"?</p>
+            <div className="flex gap-3 w-full mt-2">
+              <button onClick={() => setConfirmRemove(null)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer">Cancel</button>
+              <button onClick={() => removeTeamMember(confirmRemove.id)} className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer">Remove</button>
+            </div>
+          </div>
+        </div>
       )}
       {successMsg && <SuccessModal message={successMsg} onClose={() => setSuccessMsg(null)} />}
-      {errorMsg   && <ErrorModal   message={errorMsg}   onClose={() => setErrorMsg(null)}   />}
+      {errorMsg && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setErrorMsg(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+              <AlertTriangle size={32} className="text-red-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Error</h3>
+            <p className="text-sm text-gray-500 mb-5">{errorMsg}</p>
+            <button onClick={() => setErrorMsg(null)} className="px-6 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition cursor-pointer">Close</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1415,10 +1766,42 @@ export default function ProjectsGrid() {
       {showAddModal && <AddProjectModal onClose={() => setShowAddModal(false)} onSuccess={(msg) => { fetchProjects(); setSuccessMsg(msg); }} />}
       {showEditModal && <EditProjectModal projectId={selectedProjectId} onClose={() => setShowEditModal(false)} onSuccess={(msg) => { fetchProjects(); setSuccessMsg(msg); }} />}
       {showViewModal && <ViewProjectModal projectId={selectedProjectId} onClose={() => setShowViewModal(false)} onRefresh={fetchProjects} />}
-      {confirmDelete && <ConfirmDeleteModal title={confirmDelete.title} onConfirm={handleDeleteConfirmed} onClose={() => setConfirmDelete(null)} deleting={deleting} />}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDelete(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-6 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+              <Trash2 size={24} className="text-red-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Delete Project</h3>
+            <p className="text-sm text-gray-500 mb-1">Are you sure you want to delete</p>
+            <p className="text-sm font-semibold text-gray-800 mb-2">"{confirmDelete.title}"?</p>
+            <p className="text-xs text-red-500 mb-6">This action cannot be undone.</p>
+            <div className="flex gap-3 w-full">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer">Cancel</button>
+              <button onClick={handleDeleteConfirmed} disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-60 cursor-pointer">
+                {deleting ? <><Loader2 size={14} className="animate-spin" />Deleting…</> : <><Trash2 size={14} />Delete</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {successMsg && <SuccessModal message={successMsg} onClose={() => setSuccessMsg(null)} />}
-      {errorMsg   && <ErrorModal   message={errorMsg}   onClose={() => setErrorMsg(null)}   />}
+      {errorMsg && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setErrorMsg(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+              <AlertTriangle size={32} className="text-red-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Error</h3>
+            <p className="text-sm text-gray-500 mb-5">{errorMsg}</p>
+            <button onClick={() => setErrorMsg(null)} className="px-6 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition cursor-pointer">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

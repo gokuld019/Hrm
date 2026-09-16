@@ -2,10 +2,10 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE_URL = "https://pencilkraft.in/api";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 const ACCENT = "#f97316";
 
-const MONTH_MAP = {
+const MONTH_MAP = { 
   January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
   July: 6, August: 7, September: 8, October: 9, November: 10, December: 11,
 };
@@ -230,13 +230,13 @@ function ApplyLeaveModal({ onClose, onSuccess, onError, balances }) {
     setSubmitting(true);
     try {
       if (tab === "assigned") {
-        await apiFetch("/employee/apply-leave", {
+        await apiFetch("/api/employee/apply-leave", {
           method: "POST",
           body: JSON.stringify({ leave_type_id: Number(form.leave_type_id), start_date: form.start_date, end_date: form.end_date, reason: form.reason, description: form.description }),
         });
         onSuccess("Leave Request Submitted!", "Your leave request has been sent for manager approval. You'll be notified once reviewed.");
       } else {
-        await apiFetch("/employee/extra-leave-request", {
+        await apiFetch("/api/employee/extra-leave-request", {
           method: "POST",
           body: JSON.stringify({ start_date: form.start_date, end_date: form.end_date, reason: form.reason, description: form.description }),
         });
@@ -562,19 +562,19 @@ export default function EmployeeLeavePage() {
 
   const fetchBalances = useCallback(async () => {
     setLoadingBal(true);
-    try { const r = await apiFetch("/employee/leave-balance"); setBalances(r.data || []); } catch {}
+    try { const r = await apiFetch("/api/employee/leave-balance"); setBalances(r.data || []); } catch {}
     finally { setLoadingBal(false); }
   }, []);
 
   const fetchHistory = useCallback(async () => {
     setLoadingHist(true);
-    try { const r = await apiFetch("/employee/leave-history"); setHistory(r.data || []); } catch {}
+    try { const r = await apiFetch("/api/employee/leave-history"); setHistory(r.data || []); } catch {}
     finally { setLoadingHist(false); }
   }, []);
 
   const fetchExtra = useCallback(async () => {
     setLoadingExtra(true);
-    try { const r = await apiFetch("/employee/extra-leave-details"); setExtraLeaves(r.data || []); } catch {}
+    try { const r = await apiFetch("/api/employee/extra-leave-details"); setExtraLeaves(r.data || []); } catch {}
     finally { setLoadingExtra(false); }
   }, []);
 
@@ -589,8 +589,8 @@ export default function EmployeeLeavePage() {
   const handleConfirmCancel = async () => {
     setConfirm(c => ({ ...c, loading: true }));
     const endpoint = confirm.type === "extra"
-      ? `/employee/extra-leave-cancel/${confirm.id}`
-      : `/employee/leave-cancel/${confirm.id}`;
+      ? `/api/employee/extra-leave-cancel/${confirm.id}`
+      : `/api/employee/leave-cancel/${confirm.id}`;
     try {
       await apiFetch(endpoint, { method: "PUT" });
       setConfirm({ open: false, id: null, type: "assigned", loading: false });

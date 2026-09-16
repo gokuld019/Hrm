@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Building2, BadgeCheck, FileText,
@@ -15,7 +15,8 @@ import {
   Inbox, Send, Star, Trash2, Archive, MoreHorizontal,
   CheckCheck, Circle, Dot, Zap, Package, Briefcase,
   BarChart2, PieChart, Monitor, Smartphone, Globe2,
-  Ticket, // Added Ticket icon
+  Ticket, ThumbsUp, ThumbsDown, XCircle, CheckCircle2,
+  Palmtree, Stethoscope, Coffee, Baby, Heart, Frown, Landmark,
 } from "lucide-react";
 
 import EmployeeList    from "../Employee/Employeelist/page";
@@ -26,7 +27,6 @@ import Policies        from "../Employee/Policies/page";
 import ClientList      from "../Clients/page";
 import ProjectsGrid, { AddProjectModal } from "../Projects/ProjectsGrid/page";
 import TasksPage       from "../Projects/Tasks/page";
-import TaskBoardPage   from "../Projects/TaskBoard/page";
 import ShiftSchedule   from "../Shiftschedule/page";
 import AttendancePage  from "../Attendance/page";
 import AppsUrls        from "../Apps-urls/page";
@@ -38,7 +38,10 @@ import PayslipPage     from "../Payslip/page";
 import PayrollReport   from "../PayrollReport/page";
 import ActivityPage    from "../Activity/page";
 import ProductivityPage from "../Productivity/page";
-import TicketsPage     from "../Tickets/page"; // Import your tickets page
+import TicketsPage     from "../Tickets/page";
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.pencilkraft.in";
 
 // ─── ProtectedRoute ───────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requiredRole }) {
@@ -57,6 +60,31 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+// ─── AUTH HELPER ─────────────────────────────────────────────────────────────
+const getAuthHeaders = () => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("admin_auth_token") : null;
+  return {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "ngrok-skip-browser-warning": "true",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+// ─── LEAVE TYPE PRESETS ───────────────────────────────────────────────────────
+const LEAVE_TYPE_PRESETS = [
+  { name: "Annual Leave",      Icon: Palmtree,    color: "#f97316", bg: "#fff7ed" },
+  { name: "Sick Leave",        Icon: Stethoscope, color: "#ef4444", bg: "#fef2f2" },
+  { name: "Casual Leave",      Icon: Coffee,      color: "#3b82f6", bg: "#eff6ff" },
+  { name: "Maternity Leave",   Icon: Heart,       color: "#ec4899", bg: "#fdf2f8" },
+  { name: "Paternity Leave",   Icon: Baby,        color: "#8b5cf6", bg: "#f5f3ff" },
+  { name: "Marriage Leave",    Icon: Heart,       color: "#14b8a6", bg: "#f0fdfa" },
+  { name: "Bereavement Leave", Icon: Frown,       color: "#64748b", bg: "#f8fafc" },
+  { name: "Public Holiday",    Icon: Landmark,    color: "#22c55e", bg: "#f0fdf4" },
+  { name: "Extra Leave",       Icon: Star,        color: "#6366f1", bg: "#eef2ff" },
+];
+const getPreset = (name) => LEAVE_TYPE_PRESETS.find(p => p.name === name) || LEAVE_TYPE_PRESETS[0];
+
 // ─── DASHBOARD STATS HOOK ─────────────────────────────────────────────────────
 function useDashboardStats() {
   const [stats, setStats] = useState(null);
@@ -68,7 +96,7 @@ function useDashboardStats() {
     setError(null);
     try {
       const token = localStorage.getItem("admin_auth_token");
-      const res = await fetch("https://pencilkraft.in/api/admin/dashboard/main-stats", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/main-stats`, {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -177,28 +205,26 @@ const NavItem = ({ icon: Icon, label, badge, active, onClick, chevron }) => (
 );
 
 const PAGE_TITLES = {
-  null:            { title: "Admin Dashboard",  crumb: "Admin Dashboard"  },
-  list:            { title: "Employee List",    crumb: "Employee List"    },
-  department:      { title: "Department",       crumb: "Department"       },
-  designation:     { title: "Designation",      crumb: "Designation"      },
-  policies:        { title: "Policies",         crumb: "Policies"         },
-  details:         { title: "Employee Details", crumb: "Employee Details" },
-  clients:         { title: "Clients",          crumb: "Clients"          },
-  projects:        { title: "Projects",         crumb: "Projects"         },
-  tasks:           { title: "Tasks",            crumb: "Tasks"            },
-  taskboard:       { title: "Task Board",       crumb: "Task Board"       },
-  shiftschedule:   { title: "Shift Schedule",   crumb: "Shift Schedule"   },
-  attendance:      { title: "Attendance Admin", crumb: "Attendance Admin" },
-  screenCapture:   { title: "Screen Capture",   crumb: "Screen Capture"   },
-  liveStream:      { title: "Live Stream",      crumb: "Live Stream"      },
-  appUrls:         { title: "App & URLs",       crumb: "App & URLs"       },
-  activity:        { title: "Employee Activity", crumb: "Employee Activity" },
+  null:            { title: "Admin Dashboard",       crumb: "Admin Dashboard"       },
+  list:            { title: "Employee List",         crumb: "Employee List"         },
+  department:      { title: "Department",            crumb: "Department"            },
+  designation:     { title: "Designation",           crumb: "Designation"           },
+  policies:        { title: "Policies",              crumb: "Policies"              },
+  details:         { title: "Employee Details",      crumb: "Employee Details"      },
+  clients:         { title: "Clients",               crumb: "Clients"               },
+  projects:        { title: "Projects",              crumb: "Projects"              },
+  tasks:           { title: "Tasks",                 crumb: "Tasks"                 },
+  shiftschedule:   { title: "Shift Schedule",        crumb: "Shift Schedule"        },
+  attendance:      { title: "Attendance Admin",      crumb: "Attendance Admin"      },
+  screenCapture:   { title: "Screen Capture",        crumb: "Screen Capture"        },
+  liveStream:      { title: "Live Stream",           crumb: "Live Stream"           },
+  appUrls:         { title: "App & URLs",            crumb: "App & URLs"            },
+  activity:        { title: "Employee Activity",     crumb: "Employee Activity"     },
   productivity:    { title: "Productivity Insights", crumb: "Productivity Insights" },
-  leaveManagement: { title: "Leave Management", crumb: "Leave Management" },
-  payrollSalary:   { title: "Employee Salary",  crumb: "Employee Salary"  },
-  payrollPayslip:  { title: "Payslip",          crumb: "Payslip"          },
-  PayrollReport:   { title: "Payroll Report",   crumb: "Payroll Report"   },
-  tickets:         { title: "Tickets",          crumb: "Tickets"          }, // Added tickets page title
+  leaveManagement: { title: "Leave Management",      crumb: "Leave Management"      },
+  payrollSalary:   { title: "Employee Salary",       crumb: "Employee Salary"       },
+  payrollPayslip:  { title: "Payslip",               crumb: "Payslip"               },
+  tickets:         { title: "Tickets",               crumb: "Tickets"               },
 };
 
 // ─── Backdrop ────────────────────────────────────────────────────────────────
@@ -662,6 +688,346 @@ function Tooltip({ label, children }) {
   );
 }
 
+// ─── FORMAT DATE HELPERS ─────────────────────────────────────────────────────
+function fmtDate(dateStr) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+function fmtDateTime(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) + " · " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+const AVATAR_COLORS_DASH = ["#6366f1", "#f97316", "#14b8a6", "#ec4899", "#22c55e", "#a855f7", "#3b82f6", "#eab308"];
+const getInitials = (name = "") => name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "??";
+
+// ─── REJECT MODAL ─────────────────────────────────────────────────────────────
+function RejectModal({ request, onConfirm, onCancel, loading }) {
+  const [remarks, setRemarks] = useState("");
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white border border-gray-200 shadow-2xl z-10 overflow-hidden">
+        <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <XCircle size={16} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-white">Reject Leave Request</p>
+              <p className="text-[10px] text-red-100">{request?.employee_name} · {request?.leave_type_name}</p>
+            </div>
+          </div>
+          <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition">
+            <X size={13} className="text-white" />
+          </button>
+        </div>
+        <div className="p-5">
+          <label className="block text-xs font-bold text-gray-600 mb-2">
+            Remarks <span className="text-gray-400 font-normal">(optional)</span>
+          </label>
+          <textarea
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            placeholder="Reason for rejection…"
+            rows={3}
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 resize-none transition text-gray-800 placeholder:text-gray-400"
+          />
+          <div className="flex gap-3 mt-4">
+            <button onClick={onCancel} className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition">Cancel</button>
+            <button onClick={() => onConfirm(remarks)} disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-black text-white bg-gradient-to-r from-red-500 to-rose-600 rounded-xl transition disabled:opacity-60">
+              {loading ? <><Loader2 size={13} className="animate-spin" />Rejecting…</> : <><ThumbsDown size={13} />Reject</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD LEAVE APPROVAL PANEL (FIXED) ──────────────────────────────────────────
+function DashboardLeaveApproval({ onViewAll }) {
+  const [requests, setRequests]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [actionLoading, setAL]        = useState(null);
+  const [rejectModal, setRejectModal] = useState(null);
+  const [toast, setToast]             = useState(null);
+  const [refreshKey, setRefreshKey]   = useState(0);
+
+  const showToast = (type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const fetchRequests = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/admin/leave-requests?status=pending`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Handle different response formats
+      let list = [];
+      if (data?.data && Array.isArray(data.data)) {
+        list = data.data;
+      } else if (Array.isArray(data)) {
+        list = data;
+      } else if (data?.requests && Array.isArray(data.requests)) {
+        list = data.requests;
+      } else {
+        list = [];
+      }
+      // Take only first 4 for dashboard
+      setRequests(list.slice(0, 4));
+    } catch (err) {
+      console.error("Fetch leave requests error:", err);
+      setError(err.message || "Failed to load requests.");
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshKey]);
+
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  const handleApprove = async (req) => {
+    setAL(req.id);
+    try {
+      const res = await fetch(`${BASE}/api/admin/leave-request/${req.id}/approve`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ type: req.type || "regular" }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data?.message || `Error ${res.status}`);
+      showToast("success", data.message || "Leave approved.");
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      showToast("error", err.message);
+    } finally { setAL(null); }
+  };
+
+  const handleReject = async (req, remarks) => {
+    setAL(req.id);
+    try {
+      const res = await fetch(`${BASE}/api/admin/leave-request/${req.id}/reject`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          type: req.type || "regular", 
+          ...(remarks ? { remarks } : {}) 
+        }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data?.message || `Error ${res.status}`);
+      setRejectModal(null);
+      showToast("info", data.message || "Leave rejected.");
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      showToast("error", err.message);
+    } finally { setAL(null); }
+  };
+
+  // Helper to get employee name from request
+  const getEmployeeName = (req) => {
+    if (req.employee_name) return req.employee_name;
+    if (req.employee?.name) return req.employee.name;
+    if (req.employee?.firstname) {
+      return `${req.employee.firstname} ${req.employee.lastname || ""}`.trim();
+    }
+    return "Unknown";
+  };
+
+  // Helper to get leave type name
+  const getLeaveTypeName = (req) => {
+    if (req.leave_type_name) return req.leave_type_name;
+    if (req.leave_type?.name) return req.leave_type.name;
+    return "Leave Request";
+  };
+
+  // Helper to get days
+  const getDays = (req) => {
+    if (req.days) return req.days;
+    if (req.total_days) return req.total_days;
+    // Calculate from dates if available
+    if (req.start_date && req.end_date) {
+      const start = new Date(req.start_date);
+      const end = new Date(req.end_date);
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      return diffDays;
+    }
+    return 1;
+  };
+
+  // Helper to get start date
+  const getStartDate = (req) => {
+    if (req.start_date) return req.start_date;
+    return null;
+  };
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-violet-600 flex items-center justify-center shadow-sm shadow-violet-200">
+            <Bell size={15} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-800">Leave Requests</h3>
+            <p className="text-[10px] text-gray-400">Pending approvals</p>
+          </div>
+          {requests.length > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+              {requests.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setRefreshKey(k => k + 1)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 transition"
+          >
+            <RefreshCw size={12} />
+          </button>
+          <button
+            onClick={onViewAll}
+            className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 bg-violet-50 px-2.5 py-1.5 rounded-lg hover:bg-violet-100 transition"
+          >
+            View All <ArrowRight size={10} />
+          </button>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${
+          toast.type === "success" ? "bg-green-50 text-green-700 border border-green-200" :
+          toast.type === "error"   ? "bg-red-50 text-red-700 border border-red-200" :
+                                     "bg-blue-50 text-blue-700 border border-blue-200"
+        }`}>
+          {toast.type === "success" ? <CheckCircle2 size={12} /> : toast.type === "error" ? <XCircle size={12} /> : <Info size={12} />}
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex-1 flex flex-col gap-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="animate-pulse flex gap-3 p-3 rounded-xl border border-gray-100">
+              <div className="w-9 h-9 rounded-full bg-gray-200 shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3 w-28 bg-gray-200 rounded" />
+                <div className="h-2.5 w-20 bg-gray-100 rounded" />
+              </div>
+              <div className="h-6 w-16 bg-gray-100 rounded-lg" />
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center py-4">
+            <AlertTriangle size={22} className="text-red-300 mx-auto mb-1.5" />
+            <p className="text-xs text-red-400 font-medium">{error}</p>
+            <button onClick={() => setRefreshKey(k => k + 1)} className="text-[11px] text-orange-500 underline mt-1">Retry</button>
+          </div>
+        </div>
+      ) : requests.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center py-6">
+          <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mb-3 border border-violet-100">
+            <CheckCircle2 size={22} className="text-violet-300" />
+          </div>
+          <p className="text-sm font-semibold text-gray-500">All caught up!</p>
+          <p className="text-xs text-gray-400 mt-0.5">No pending leave requests</p>
+        </div>
+      ) : (
+        <div className="flex-1 space-y-2 overflow-y-auto max-h-[280px] pr-0.5">
+          {requests.map((req, i) => {
+            const employeeName = getEmployeeName(req);
+            const leaveTypeName = getLeaveTypeName(req);
+            const days = getDays(req);
+            const startDate = getStartDate(req);
+            const preset = getPreset(leaveTypeName);
+            const PIcon = preset.Icon;
+            const avatarBg = AVATAR_COLORS_DASH[(req.employee_id || i) % AVATAR_COLORS_DASH.length];
+            const initials = getInitials(employeeName);
+            const isLoading = actionLoading === req.id;
+
+            return (
+              <div key={req.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:border-violet-200 hover:bg-violet-50/30 transition-all group">
+                {/* Avatar */}
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0 ring-2 ring-white shadow-sm"
+                  style={{ backgroundColor: avatarBg }}
+                >
+                  {initials}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-800 truncate leading-tight">{employeeName}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span
+                      className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: preset.bg, color: preset.color }}
+                    >
+                      <PIcon size={8} />
+                      {leaveTypeName}
+                    </span>
+                    <span className="text-[10px] text-orange-500 font-bold">{days}d</span>
+                    {startDate && (
+                      <span className="text-[9px] text-gray-400">{fmtDate(startDate)}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isLoading ? (
+                    <Loader2 size={14} className="animate-spin text-violet-400" />
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setRejectModal(req)}
+                        title="Reject"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:border-red-300 transition"
+                      >
+                        <ThumbsDown size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleApprove(req)}
+                        title="Approve"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition shadow-sm shadow-emerald-100"
+                      >
+                        <ThumbsUp size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <RejectModal
+          request={rejectModal}
+          loading={actionLoading === rejectModal.id}
+          onConfirm={(remarks) => handleReject(rejectModal, remarks)}
+          onCancel={() => setRejectModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [sidebarOpen,          setSidebarOpen]          = useState(true);
@@ -679,7 +1045,6 @@ export default function AdminDashboard() {
   const [openPanel, setOpenPanel] = useState(null);
   const { spinning, trigger: triggerRefresh } = useRefreshButton();
 
-  // ── API stats ──
   const { stats, loading: statsLoading, error: statsError, refetch: refetchStats } = useDashboardStats();
 
   let user    = { name: "Admin", role: "admin", email: "" };
@@ -757,19 +1122,18 @@ export default function AdminDashboard() {
       case "clients":       return <ClientList />;
       case "projects":      return <ProjectsGrid />;
       case "tasks":         return <TasksPage />;
-      case "taskboard":     return <TaskBoardPage />;
       case "shiftschedule": return <ShiftSchedule />;
       case "attendance":    return <AttendancePage />;
       case "screenCapture": return <ScreenCapture />;
       case "liveStream":    return <Livestream />;
       case "appUrls":       return <AppsUrls />;
       case "leaveManagement": return <LeaveManagement />;
-      case "payrollSalary":  return <EmployeeSalaryPage ACCENT="#f97316" />;
-      case "payrollPayslip": return <PayslipPage ACCENT="#f97316" />;
-      case "PayrollReport":  return <PayrollReport ACCENT="#f97316" />;
-      case "activity":       return <ActivityPage />;
-      case "productivity":   return <ProductivityPage />;
-      case "tickets":        return <TicketsPage />; // Added tickets page rendering
+      case "payrollSalary":   return <EmployeeSalaryPage ACCENT="#f97316" />;
+      case "payrollPayslip":  return <PayslipPage ACCENT="#f97316" />;
+      case "PayrollReport":   return <PayrollReport ACCENT="#f97316" />;
+      case "activity":        return <ActivityPage />;
+      case "productivity":    return <ProductivityPage />;
+      case "tickets":         return <TicketsPage />;
       default: return renderDashboard();
     }
   };
@@ -789,12 +1153,6 @@ export default function AdminDashboard() {
     const halfDay  = att.half_day ?? 0;
     const late     = att.late     ?? 0;
     const absent   = att.absent   ?? 0;
-
-    const toP = (v) => totalEmp > 0 ? Math.round((v / totalEmp) * 100) : 0;
-    const presentP  = toP(present);
-    const halfDayP  = toP(halfDay);
-    const lateP     = toP(late);
-    const absentP   = toP(absent);
 
     const deptMax = depts.length > 0 ? Math.max(...depts.map(d => d.count), 1) : 1;
 
@@ -848,56 +1206,29 @@ export default function AdminDashboard() {
 
         {!statsLoading && (
           <>
+            {/* ── Stat Cards Row 1 ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <StatCard icon={UserCheck}  iconBg="#f97316" label="Attendance Overview" value={`${present}/${totalEmp}`}             link="View Details" onLinkClick={() => navigate("attendance")} />
-              <StatCard icon={FolderOpen} iconBg="#14b8a6" label="Total Projects"      value={`${proj.completed ?? 0}/${proj.total ?? 0}`} link="View All"     onLinkClick={() => navigate("projects")} />
-              <StatCard icon={Globe}      iconBg="#6366f1" label="Total Clients"       value={`${cli.active ?? 0}/${cli.total ?? 0}`}     link="View All"     onLinkClick={() => navigate("clients")} />
-              <StatCard icon={CheckSquare} iconBg="#ec4899" label="Total Tasks"        value={`${task.completed ?? 0}/${task.total ?? 0}`} link="View All"     onLinkClick={() => navigate("tasks")} />
+              <StatCard icon={UserCheck}   iconBg="#f97316" label="Attendance Overview" value={`${present}/${totalEmp}`}              link="View Details" onLinkClick={() => navigate("attendance")} />
+              <StatCard icon={FolderOpen}  iconBg="#14b8a6" label="Total Projects"      value={`${proj.completed ?? 0}/${proj.total ?? 0}`}  link="View All"     onLinkClick={() => navigate("projects")} />
+              <StatCard icon={Globe}       iconBg="#6366f1" label="Total Clients"       value={`${cli.active ?? 0}/${cli.total ?? 0}`}       link="View All"     onLinkClick={() => navigate("clients")} />
+              <StatCard icon={CheckSquare} iconBg="#ec4899" label="Total Tasks"         value={`${task.completed ?? 0}/${task.total ?? 0}`}  link="View All"     onLinkClick={() => navigate("tasks")} />
             </div>
 
+            {/* ── Stat Cards Row 2 ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <StatCard icon={DollarSign} iconBg="#a855f7" label="Payroll"            value="View"                          link="Go to Payroll" onLinkClick={() => navigate("payrollSalary")} />
-              <StatCard icon={TrendingUp} iconBg="#ef4444" label="Total Employees"    value={totalEmp}                      link="View All"      onLinkClick={() => navigate("list")} />
-              <StatCard icon={UserCheck}  iconBg="#22c55e" label="Active Employees"   value={empSt.active   ?? "–"}         link="View All"      onLinkClick={() => navigate("list")} />
-              <StatCard icon={UserPlus}   iconBg="#1e293b" label="Inactive Employees" value={empSt.inactive ?? "–"}         link="View All"      onLinkClick={() => navigate("list")} />
+              <StatCard icon={DollarSign} iconBg="#a855f7" label="Payroll"             value="View"                   link="Go to Payroll" onLinkClick={() => navigate("payrollSalary")} />
+              <StatCard icon={TrendingUp} iconBg="#ef4444" label="Total Employees"     value={totalEmp}               link="View All"      onLinkClick={() => navigate("list")} />
+              <StatCard icon={UserCheck}  iconBg="#22c55e" label="Active Employees"    value={empSt.active   ?? "–"}  link="View All"      onLinkClick={() => navigate("list")} />
+              <StatCard icon={UserPlus}   iconBg="#1e293b" label="Inactive Employees"  value={empSt.inactive ?? "–"}  link="View All"      onLinkClick={() => navigate("list")} />
             </div>
 
+            {/* ── Three-column section: Leave Requests | Attendance Donut | Dept Bars ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-gray-800">Employee Status</h3>
-                  <button className="flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-lg px-2.5 py-1">
-                    <Calendar size={11} /> Today
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-500">Total Employees</span>
-                  <span className="text-sm font-bold text-gray-800">{totalEmp}</span>
-                </div>
-                <div className="h-3 rounded-full overflow-hidden flex mb-4">
-                  <div className="h-full bg-orange-400" style={{ width: `${presentP}%`  }} />
-                  <div className="h-full bg-teal-500"   style={{ width: `${halfDayP}%` }} />
-                  <div className="h-full bg-yellow-400" style={{ width: `${lateP}%`    }} />
-                  <div className="h-full bg-red-500"    style={{ width: `${absentP}%`  }} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: `Present (${presentP}%)`,  value: present,  color: "#f97316" },
-                    { label: `Half Day (${halfDayP}%)`, value: halfDay,  color: "#14b8a6" },
-                    { label: `Late (${lateP}%)`,        value: late,     color: "#eab308" },
-                    { label: `Absent (${absentP}%)`,    value: absent,   color: "#ef4444" },
-                  ].map(item => (
-                    <div key={item.label} className="flex items-start gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style={{ backgroundColor: item.color }} />
-                      <div>
-                        <p className="text-[11px] text-gray-400">{item.label}</p>
-                        <p className="text-lg font-bold text-gray-800">{item.value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
+              {/* ── COLUMN 1 — Leave Approval Requests ── */}
+              <DashboardLeaveApproval onViewAll={() => navigate("leaveManagement")} />
+
+              {/* ── COLUMN 2 — Attendance Overview donut ── */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-gray-800">Attendance Overview</h3>
@@ -908,6 +1239,7 @@ export default function AdminDashboard() {
                 <DonutChart present={present} halfDay={halfDay} late={late} absent={absent} total={present} />
               </div>
 
+              {/* ── COLUMN 3 — Employees by Department bars ── */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-gray-800">Employees By Department</h3>
@@ -926,6 +1258,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* ── Recent Clock Records ── */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mt-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-gray-800">Recent Clock Records</h3>
@@ -1001,6 +1334,7 @@ export default function AdminDashboard() {
           ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 99px; }
         `}</style>
 
+        {/* ── Sidebar ── */}
         <aside className={`${sidebarOpen ? "w-60" : "w-0 overflow-hidden"} shrink-0 bg-white border-r border-gray-100 flex flex-col transition-all duration-300`}>
           <div className="flex items-center gap-2.5 px-5 py-5 border-b border-gray-100 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white font-black text-sm">S</div>
@@ -1029,17 +1363,16 @@ export default function AdminDashboard() {
               <NavItem icon={FolderOpen} label="Projects" active={isProjectsPage && activePage !== "clients"} chevron={projectsDropdownOpen} onClick={() => setProjectsDropdownOpen(p => !p)} />
               <div className={`overflow-hidden transition-all duration-200 ${projectsDropdownOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"}`}>
                 <div className="ml-4 mt-1 border-l-2 border-gray-100 pl-3 pb-1 space-y-1">
-                  <SubNavItem icon={LayoutGrid} label="Projects"   page="projects"  />
-                  <SubNavItem icon={ListTodo}   label="Tasks"      page="tasks"     />
-                  <SubNavItem icon={Kanban}     label="Task Board" page="taskboard" />
+                  <SubNavItem icon={LayoutGrid} label="Projects" page="projects" />
+                  <SubNavItem icon={ListTodo}   label="Tasks"    page="tasks"    />
                 </div>
               </div>
             </div>
 
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-4 mt-5 mb-2">Attendance</p>
-            <NavItem icon={ClipboardList} label="Attendance"      active={isAttendancePage}              onClick={() => navigate("attendance")}      />
-            <NavItem icon={CalendarClock} label="Shift Schedule"  active={isShiftPage}                   onClick={() => navigate("shiftschedule")}   />
-            <NavItem icon={CalendarClock} label="Leave Management" active={activePage === "leaveManagement"} onClick={() => navigate("leaveManagement")} />
+            <NavItem icon={ClipboardList} label="Attendance"       active={isAttendancePage}                    onClick={() => navigate("attendance")}      />
+            <NavItem icon={CalendarClock} label="Shift Schedule"   active={isShiftPage}                         onClick={() => navigate("shiftschedule")}   />
+            <NavItem icon={CalendarClock} label="Leave Management" active={activePage === "leaveManagement"}    onClick={() => navigate("leaveManagement")} />
 
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-4 mt-5 mb-2">Payroll</p>
             <div>
@@ -1048,7 +1381,6 @@ export default function AdminDashboard() {
                 <div className="ml-4 mt-1 border-l-2 border-gray-100 pl-3 pb-1 space-y-1">
                   <SubNavItem icon={Users}    label="Employee Salary" page="payrollSalary"  />
                   <SubNavItem icon={FileText} label="Payslip"         page="payrollPayslip" />
-                  <SubNavItem icon={Package}  label="Payroll Report"  page="PayrollReport"  />
                 </div>
               </div>
             </div>
@@ -1064,7 +1396,6 @@ export default function AdminDashboard() {
               <NavItem icon={Settings} label="Settings" chevron={settingsOpen} active={settingsOpen} onClick={() => setSettingsOpen(v => !v)} />
               <div className={`overflow-hidden transition-all duration-200 ${settingsOpen ? "max-h-40 opacity-100" : "max-h-0 opacity-0"}`}>
                 <div className="ml-4 mt-1 border-l-2 border-gray-100 pl-3 pb-1 space-y-1">
-                  {/* Tickets added below Settings */}
                   <SubNavItem icon={Ticket} label="Tickets" page="tickets" />
                   <button onClick={handleLogout} disabled={loggingOut}
                     className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl cursor-pointer transition-all text-red-500 hover:bg-red-50 disabled:opacity-60 group">
@@ -1077,8 +1408,10 @@ export default function AdminDashboard() {
           </div>
         </aside>
 
+        {/* ── Main Area ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
+          {/* ── Header ── */}
           <header className="h-14 bg-white border-b border-gray-100 flex items-center px-5 gap-4 shrink-0 relative z-30">
             <button onClick={() => setSidebarOpen(v => !v)}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all active:scale-95">
@@ -1138,6 +1471,7 @@ export default function AdminDashboard() {
             </div>
           </header>
 
+          {/* ── Panels ── */}
           {openPanel === "notifications" && <NotificationPanel onClose={closePanel} />}
           {openPanel === "mail"          && <MailPanel onClose={closePanel} />}
           {openPanel === "appswitcher"   && <AppSwitcherPanel onClose={closePanel} />}
@@ -1145,6 +1479,7 @@ export default function AdminDashboard() {
           {openPanel === "calendar"      && <CalendarPanel onClose={closePanel} />}
           {openPanel === "profile"       && <ProfilePanel onClose={closePanel} displayName={displayName} onLogout={handleLogout} loggingOut={loggingOut} />}
 
+          {/* ── Page Content ── */}
           <main className="flex-1 overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -1187,6 +1522,7 @@ export default function AdminDashboard() {
           </main>
         </div>
 
+        {/* ── FAB Settings ── */}
         <button
           onClick={() => togglePanel("settings")}
           className={`fixed bottom-6 right-6 w-11 h-11 rounded-[14px] shadow-xl flex items-center justify-center transition-all duration-200 z-40 hover:scale-110 active:scale-95

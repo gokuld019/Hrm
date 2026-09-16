@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE = "https://pencilkraft.in";
+const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
   Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",

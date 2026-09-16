@@ -2,8 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── API BASE ──────────────────────────────────────────────────────────────────
-const BASE = "https://pencilkraft.in/api/employee";
-
+const BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/employee`;
 function getAuthToken() {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("employee_auth_token");

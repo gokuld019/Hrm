@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from "react";
 
 const ACCENT = "#f97316";
 const DEPARTMENTS = ["All","Engineering","Design","Finance","HR","Marketing","Sales","Operations"];
-const BASE_URL = "https://api.pencilkraft.in/api/admin";
+const BASE_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/admin`;
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function getHeaders() {
@@ -47,25 +47,6 @@ const CALC_TYPES = [
   { value:"percentage_of_gross", label:"% of Gross"     },
 ];
 function calcLabel(t){ return CALC_TYPES.find(o=>o.value===t)?.label || t || "—"; }
-
-// ── MOCK DATA (Employee Salary tab) ───────────────────────────────────────────
-const MOCK_EMPLOYEES = [
-  { id:"EMP-001", name:"Arjun Sharma",    dept:"Engineering", role:"Senior Developer",   gross:85000, deduction:8500,  net:76500, tax:6200, pf:3400, paid_days:22, work_days:22, status:"Paid",    joining:"12 Sep 2022", bank:"HDFC ****4521", salaryGrade:"High"   },
-  { id:"EMP-002", name:"Priya Nair",      dept:"Design",      role:"UI/UX Designer",     gross:72000, deduction:7200,  net:64800, tax:5100, pf:2880, paid_days:20, work_days:22, status:"Paid",    joining:"08 Mar 2023", bank:"SBI ****7823",  salaryGrade:"Medium" },
-  { id:"EMP-003", name:"Rahul Mehta",     dept:"Finance",     role:"Financial Analyst",  gross:68000, deduction:6800,  net:61200, tax:4800, pf:2720, paid_days:22, work_days:22, status:"Pending", joining:"15 Jan 2023", bank:"ICICI ****3341",salaryGrade:"Medium" },
-  { id:"EMP-004", name:"Sneha Iyer",      dept:"HR",          role:"HR Manager",         gross:75000, deduction:7500,  net:67500, tax:5500, pf:3000, paid_days:21, work_days:22, status:"Paid",    joining:"20 Jul 2021", bank:"Axis ****9912", salaryGrade:"Medium" },
-  { id:"EMP-005", name:"Vikram Pillai",   dept:"Engineering", role:"DevOps Engineer",    gross:90000, deduction:9000,  net:81000, tax:6800, pf:3600, paid_days:22, work_days:22, status:"Paid",    joining:"03 Nov 2022", bank:"HDFC ****2234", salaryGrade:"High"   },
-  { id:"EMP-006", name:"Kavya Reddy",     dept:"Marketing",   role:"Marketing Lead",     gross:65000, deduction:6500,  net:58500, tax:4500, pf:2600, paid_days:19, work_days:22, status:"Unpaid",  joining:"25 Apr 2023", bank:"SBI ****5567",  salaryGrade:"Medium" },
-  { id:"EMP-007", name:"Arun Kumar",      dept:"Engineering", role:"Backend Developer",  gross:78000, deduction:7800,  net:70200, tax:5700, pf:3120, paid_days:22, work_days:22, status:"Paid",    joining:"11 Feb 2022", bank:"ICICI ****8810",salaryGrade:"Medium" },
-  { id:"EMP-008", name:"Divya Menon",     dept:"Sales",       role:"Sales Executive",    gross:60000, deduction:6000,  net:54000, tax:4200, pf:2400, paid_days:18, work_days:22, status:"Pending", joining:"30 Aug 2023", bank:"Kotak ****1122",salaryGrade:"Basic"  },
-  { id:"EMP-009", name:"Suresh Babu",     dept:"Design",      role:"Graphic Designer",   gross:58000, deduction:5800,  net:52200, tax:4000, pf:2320, paid_days:22, work_days:22, status:"Paid",    joining:"17 Oct 2023", bank:"HDFC ****6634", salaryGrade:"Basic"  },
-  { id:"EMP-010", name:"Ananya Krishnan", dept:"HR",          role:"HR Executive",       gross:55000, deduction:5500,  net:49500, tax:3800, pf:2200, paid_days:21, work_days:22, status:"Paid",    joining:"05 Dec 2023", bank:"SBI ****3398",  salaryGrade:"Basic"  },
-  { id:"EMP-011", name:"Mohan Das",       dept:"Operations",  role:"Ops Manager",        gross:80000, deduction:8000,  net:72000, tax:5900, pf:3200, paid_days:22, work_days:22, status:"Paid",    joining:"14 Jun 2021", bank:"ICICI ****7745",salaryGrade:"High"   },
-  { id:"EMP-012", name:"Lakshmi Patel",   dept:"Finance",     role:"Sr. Accountant",     gross:70000, deduction:7000,  net:63000, tax:5000, pf:2800, paid_days:20, work_days:22, status:"Pending", joining:"22 Jan 2022", bank:"Axis ****4401", salaryGrade:"Medium" },
-  { id:"EMP-013", name:"Ravi Shankar",    dept:"Engineering", role:"Frontend Developer", gross:73000, deduction:7300,  net:65700, tax:5200, pf:2920, paid_days:22, work_days:22, status:"Paid",    joining:"09 Sep 2022", bank:"HDFC ****8823", salaryGrade:"Medium" },
-  { id:"EMP-014", name:"Meena Joshi",     dept:"Marketing",   role:"Content Writer",     gross:52000, deduction:5200,  net:46800, tax:3500, pf:2080, paid_days:22, work_days:22, status:"Unpaid",  joining:"18 Mar 2024", bank:"SBI ****9901",  salaryGrade:"Basic"  },
-  { id:"EMP-015", name:"Deepak Singh",    dept:"Sales",       role:"Business Developer", gross:82000, deduction:8200,  net:73800, tax:6100, pf:3280, paid_days:21, work_days:22, status:"Paid",    joining:"27 Nov 2022", bank:"Kotak ****2278",salaryGrade:"High"   },
-];
 
 const SALARY_GRADE_TEMPLATES = {
   basic:  { basicPct:60, hraPct:20, conveyancePct:5, medicalPct:3,  specialPct:7, bonusPct:5 },
@@ -970,7 +951,7 @@ function SalaryStructuresSection({ showAddStructure, setShowAddStructure, editSt
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── PAYROLL OVERVIEW CHART  (uses API monthly_breakdown)
+// ── PAYROLL OVERVIEW CHART
 // ════════════════════════════════════════════════════════════════════════════
 function SalaryBarChart({ data, loading, period, onPeriodChange }) {
   if (loading) {
@@ -980,7 +961,6 @@ function SalaryBarChart({ data, loading, period, onPeriodChange }) {
       </div>
     );
   }
-
   if (!data || data.length === 0) {
     return (
       <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:220,flexDirection:"column",gap:8}}>
@@ -989,13 +969,11 @@ function SalaryBarChart({ data, loading, period, onPeriodChange }) {
       </div>
     );
   }
-
   const maxVal = Math.max(...data.map(d => (d.gross || 0)));
   const safeMax = maxVal || 1;
   const chartH=130, barW=32, gap=16, padL=62, padB=28;
   const svgW = Math.max(300, padL + data.length*(barW+gap)+10);
   const yLabels = [0,0.25,0.5,0.75,1].map(f => Math.round(safeMax*f/1000)*1000);
-
   return (
     <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -1041,13 +1019,9 @@ function SalaryBarChart({ data, loading, period, onPeriodChange }) {
             const dedH   = (ded/safeMax)*chartH;
             return (
               <g key={d.month}>
-                {/* Gross bar (full height, blue) */}
                 <rect x={x} y={chartH-grossH} width={barW} height={grossH} rx={5} fill="#3b82f6" opacity={0.85}/>
-                {/* Net bar (green overlay on left portion) */}
                 <rect x={x} y={chartH-netH} width={Math.round(barW*0.45)} height={netH} rx={4} fill="#22c55e" opacity={0.9}/>
-                {/* Deduction indicator (small red bar on right) */}
                 <rect x={x+Math.round(barW*0.6)} y={chartH-dedH} width={Math.round(barW*0.35)} height={dedH} rx={3} fill="#fca5a5" opacity={0.85}/>
-                {/* Month label */}
                 <text x={x+barW/2} y={chartH+18} textAnchor="middle" fontSize={9.5} fill="#9ca3af" fontWeight={600}>{MONTH_NAMES[(d.month-1)%12]}</text>
               </g>
             );
@@ -1059,7 +1033,7 @@ function SalaryBarChart({ data, loading, period, onPeriodChange }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── DEPARTMENT DONUT  (uses API department_breakdown)
+// ── DEPARTMENT DONUT
 // ════════════════════════════════════════════════════════════════════════════
 function DeptDonut({ deptData, loading }) {
   if (loading) {
@@ -1069,7 +1043,6 @@ function DeptDonut({ deptData, loading }) {
       </div>
     );
   }
-
   if (!deptData || deptData.length === 0) {
     return (
       <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:180,flexDirection:"column",gap:8}}>
@@ -1078,7 +1051,6 @@ function DeptDonut({ deptData, loading }) {
       </div>
     );
   }
-
   const colors = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
   const total  = deptData.reduce((s,d) => s + (d.amount||0), 0);
   const entries = deptData.map((d,i) => ({
@@ -1087,7 +1059,6 @@ function DeptDonut({ deptData, loading }) {
     pct:   d.percentage || ((d.amount/total)*100),
     color: colors[i % colors.length],
   }));
-
   const cx=55, cy=55, R=44, r=28;
   let angle = -Math.PI/2;
   const segments = entries.map(e=>{
@@ -1101,7 +1072,6 @@ function DeptDonut({ deptData, loading }) {
     const large = sweep > Math.PI ? 1 : 0;
     return { ...e, path:`M${x1},${y1} A${R},${R},0,${large},1,${x2},${y2} L${ix2},${iy2} A${r},${r},0,${large},0,${ix1},${iy1} Z` };
   });
-
   return (
     <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
       <div style={{fontSize:14,fontWeight:900,color:"#111827",marginBottom:2}}>By Department</div>
@@ -1150,8 +1120,11 @@ function StatCard({ icon, iconBg, label, value, sub, subColor, trend, loading })
 function PayslipModal({ emp, onClose, month }) {
   const [sending,setSending]=useState(false);const [sent,setSent]=useState(false);
   const handleSend=async()=>{setSending(true);await new Promise(r=>setTimeout(r,1200));setSending(false);setSent(true);setTimeout(()=>setSent(false),3000);};
-  const allowances=[{label:"Basic Salary",amount:Math.round(emp.gross*0.5)},{label:"HRA",amount:Math.round(emp.gross*0.2)},{label:"Transport Allowance",amount:Math.round(emp.gross*0.05)},{label:"Medical Allowance",amount:Math.round(emp.gross*0.05)},{label:"Special Allowance",amount:Math.round(emp.gross*0.1)},{label:"Performance Bonus",amount:Math.round(emp.gross*0.1)}];
-  const deductions=[{label:"PF (Employee 12%)",amount:emp.pf},{label:"PF (Employer 12%)",amount:Math.round(emp.pf*0.5)},{label:"Professional Tax",amount:200},{label:"Income Tax (TDS)",amount:emp.tax},{label:"Health Insurance",amount:Math.round(emp.gross*0.01)}];
+  const gross = emp.gross || 0;
+  const pf    = emp.pf    || 0;
+  const tax   = emp.tax   || 0;
+  const allowances=[{label:"Basic Salary",amount:Math.round(gross*0.5)},{label:"HRA",amount:Math.round(gross*0.2)},{label:"Transport Allowance",amount:Math.round(gross*0.05)},{label:"Medical Allowance",amount:Math.round(gross*0.05)},{label:"Special Allowance",amount:Math.round(gross*0.1)},{label:"Performance Bonus",amount:Math.round(gross*0.1)}];
+  const deductions=[{label:"PF (Employee 12%)",amount:pf},{label:"PF (Employer 12%)",amount:Math.round(pf*0.5)},{label:"Professional Tax",amount:200},{label:"Income Tax (TDS)",amount:tax},{label:"Health Insurance",amount:Math.round(gross*0.01)}];
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(10px)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 48px 120px rgba(0,0,0,0.3)",animation:"modalIn 0.25s ease"}}>
@@ -1161,27 +1134,27 @@ function PayslipModal({ emp, onClose, month }) {
         </div>
         <div style={{padding:"20px 24px 0"}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:14,padding:"13px 15px",background:"#f8fafc",borderRadius:11,border:"1px solid #f1f5f9"}}>
-            <div><div style={{fontSize:13.5,fontWeight:900,color:"#111827"}}>PencilKraft Technologies</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>Bengaluru, Karnataka 560001</div></div>
-            <div style={{textAlign:"right"}}><div style={{fontSize:11.5,fontWeight:800,color:ACCENT}}>Payslip #{emp.id}</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{month} · {emp.bank}</div></div>
+            <div><div style={{fontSize:13.5,fontWeight:900,color:"#111827"}}>Organization</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>HR Management System</div></div>
+            <div style={{textAlign:"right"}}><div style={{fontSize:11.5,fontWeight:800,color:ACCENT}}>Payslip #{emp.id}</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{month} · {emp.bank||"—"}</div></div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,padding:"11px 14px",background:"#fff7ed",borderRadius:11,border:"1px solid #fed7aa"}}>
-            <Avatar name={emp.name} size={42}/>
-            <div><div style={{fontSize:13.5,fontWeight:800,color:"#111827"}}>{emp.name}</div><div style={{fontSize:11,color:"#9ca3af"}}>{emp.id} · {emp.role} · {emp.dept}</div><div style={{fontSize:11,color:"#9ca3af"}}>Joining: {emp.joining} · Days: {emp.paid_days}/{emp.work_days}</div></div>
+            <Avatar name={emp.name||"?"} size={42}/>
+            <div><div style={{fontSize:13.5,fontWeight:800,color:"#111827"}}>{emp.name}</div><div style={{fontSize:11,color:"#9ca3af"}}>{emp.id} · {emp.role} · {emp.dept}</div><div style={{fontSize:11,color:"#9ca3af"}}>Joining: {emp.joining||"—"} · Days: {emp.paid_days||0}/{emp.work_days||0}</div></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
             <div>
               <div style={{fontSize:10,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:2,background:"#22c55e"}}/> Earnings</div>
               {allowances.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:11.5,color:"#6b7280"}}>{a.label}</span><span style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>{fmt(a.amount)}</span></div>)}
-              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#16a34a",fontSize:13}}><span>Gross</span><span>{fmt(emp.gross)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#16a34a",fontSize:13}}><span>Gross</span><span>{fmt(gross)}</span></div>
             </div>
             <div>
               <div style={{fontSize:10,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:2,background:"#ef4444"}}/> Deductions</div>
               {deductions.map((d,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:11.5,color:"#6b7280"}}>{d.label}</span><span style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>{fmt(d.amount)}</span></div>)}
-              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#dc2626",fontSize:13}}><span>Total</span><span>{fmt(emp.deduction)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#dc2626",fontSize:13}}><span>Total</span><span>{fmt(emp.deduction||0)}</span></div>
             </div>
           </div>
           <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-            <div><div style={{fontSize:10.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>Net Take Home</div><div style={{fontSize:28,fontWeight:900,color:"#fff",letterSpacing:"-1.5px"}}>{fmt(emp.net)}</div></div>
+            <div><div style={{fontSize:10.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>Net Take Home</div><div style={{fontSize:28,fontWeight:900,color:"#fff",letterSpacing:"-1.5px"}}>{fmt(emp.net||0)}</div></div>
             <div style={{width:54,height:54,borderRadius:"50%",background:`${ACCENT}25`,border:`2px solid ${ACCENT}50`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.wallet} stroke={ACCENT} size={22}/></div>
           </div>
           <div style={{display:"flex",gap:10,marginBottom:20}}>
@@ -1197,7 +1170,7 @@ function PayslipModal({ emp, onClose, month }) {
 }
 
 function EditSalaryModal({ emp, onClose, onSave }) {
-  const [form,setForm]=useState({gross:emp.gross,deduction:emp.deduction,status:emp.status,salaryGrade:emp.salaryGrade||"Basic"});
+  const [form,setForm]=useState({gross:emp.gross||0,deduction:emp.deduction||0,status:emp.status||"Pending",salaryGrade:emp.salaryGrade||"Basic"});
   const [saving,setSaving]=useState(false);
   const net=form.gross-form.deduction;
   const set=(k,v)=>setForm(p=>({...p,[k]:v}));
@@ -1268,7 +1241,9 @@ function ConfirmModal({ emp, onClose, onConfirm }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function EmployeeSalaryPage() {
   const [activeTab,        setActiveTab]        = useState("salary");
-  const [employees,        setEmployees]        = useState(MOCK_EMPLOYEES);
+  const [employees,        setEmployees]        = useState([]);
+  const [loadingEmps,      setLoadingEmps]      = useState(true);
+  const [errorEmps,        setErrorEmps]        = useState(null);
   const [search,           setSearch]           = useState("");
   const [dept,             setDept]             = useState("All");
   const [status,           setStatus]           = useState("All");
@@ -1285,12 +1260,45 @@ export default function EmployeeSalaryPage() {
   const [showAddStructure, setShowAddStructure] = useState(false);
   const [editStructure,    setEditStructure]    = useState(null);
 
-  // ── Dashboard stats from API ──────────────────────────────────────────────
-  const [dashStats,         setDashStats]         = useState(null);
-  const [monthlyBreakdown,  setMonthlyBreakdown]  = useState([]);
-  const [deptBreakdown,     setDeptBreakdown]     = useState([]);
-  const [loadingStats,      setLoadingStats]      = useState(true);
+  const [dashStats,        setDashStats]        = useState(null);
+  const [monthlyBreakdown, setMonthlyBreakdown] = useState([]);
+  const [deptBreakdown,    setDeptBreakdown]    = useState([]);
+  const [loadingStats,     setLoadingStats]     = useState(true);
 
+  // ── Fetch employees ────────────────────────────────────────────────────────
+  useEffect(() => {
+    setLoadingEmps(true);
+    setErrorEmps(null);
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/employees`, {
+      headers: getHeaders(),
+    })
+      .then(r => r.json())
+      .then(res => {
+        const list = res.data ?? res.employees ?? (Array.isArray(res) ? res : []);
+       const normalized = list.map(e => ({
+  id:          String(e.employee_id ?? e.id ?? ""),
+  name:        String(e.firstname && e.lastname ? `${e.firstname} ${e.lastname}` : (e.username ?? e.name ?? "")),
+  role:        String(e.designation?.name ?? e.position ?? e.role ?? ""),
+  dept:        String(e.department?.name ?? e.dept ?? ""),
+  gross:       parseFloat(e.salary_structure?.monthly_ctc ?? e.gross_salary ?? e.gross ?? 0),
+  deduction:   parseFloat(e.total_deduction ?? e.deduction ?? 0),
+  net:         parseFloat(e.net_salary ?? e.net ?? 0),
+  tax:         parseFloat(e.tax ?? 0),
+  pf:          parseFloat(e.pf ?? 0),
+  paid_days:   Number(e.paid_days ?? e.working_days ?? 22),
+  work_days:   Number(e.work_days ?? e.total_days ?? 22),
+  status:      String(e.payment_status ?? e.status ?? "Pending"),
+  joining:     String(e.joining_date ?? e.joining ?? ""),
+  bank:        String(e.bank_account ?? e.bank ?? ""),
+  salaryGrade: String(e.salary_structure?.grade ?? e.salary_grade ?? e.salaryGrade ?? "Basic"),
+}));
+        setEmployees(normalized);
+      })
+      .catch(() => setErrorEmps("Failed to load employees."))
+      .finally(() => setLoadingEmps(false));
+  }, []);
+
+  // ── Fetch dashboard stats ──────────────────────────────────────────────────
   useEffect(() => {
     const year = month.split(" ")[1] || new Date().getFullYear();
     setLoadingStats(true);
@@ -1298,7 +1306,6 @@ export default function EmployeeSalaryPage() {
       .then(res => {
         if (res.success) {
           setDashStats(res.totals);
-          // ── feed the two new sections ──────────────────────────────────
           setMonthlyBreakdown(Array.isArray(res.monthly_breakdown) ? res.monthly_breakdown : []);
           setDeptBreakdown(Array.isArray(res.department_breakdown) ? res.department_breakdown : []);
         }
@@ -1307,40 +1314,50 @@ export default function EmployeeSalaryPage() {
       .finally(() => setLoadingStats(false));
   }, [month]);
 
-  // Filter monthly data by period selection
   const filteredMonthly = (() => {
     if (!monthlyBreakdown.length) return [];
     const sorted = [...monthlyBreakdown].sort((a,b) => a.month - b.month);
     if (period === "3M") return sorted.slice(-3);
     if (period === "6M") return sorted.slice(-6);
-    return sorted; // 1Y = all
+    return sorted;
   })();
 
-  // Stat card values — prefer API, fallback to mock
-  const totalGross     = dashStats ? dashStats.gross      : employees.reduce((s,e)=>s+e.gross,0);
-  const totalNet       = dashStats ? dashStats.net        : employees.reduce((s,e)=>s+e.net,0);
-  const totalDeduction = dashStats ? dashStats.deductions : employees.reduce((s,e)=>s+e.deduction,0);
-  const paidCount      = dashStats ? dashStats.paid       : employees.filter(e=>e.status==="Paid").length;
-  const pendingCount   = dashStats ? dashStats.pending    : employees.filter(e=>e.status==="Pending").length;
-  const unpaidCount    = dashStats ? dashStats.unpaid     : employees.filter(e=>e.status==="Unpaid").length;
+  const totalGross     = dashStats ? dashStats.gross          : employees.reduce((s,e)=>s+(e.gross||0),0);
+  const totalNet       = dashStats ? dashStats.net            : employees.reduce((s,e)=>s+(e.net||0),0);
+  const totalDeduction = dashStats ? dashStats.deductions     : employees.reduce((s,e)=>s+(e.deduction||0),0);
+  const paidCount      = dashStats ? dashStats.paid           : employees.filter(e=>e.status==="Paid").length;
+  const pendingCount   = dashStats ? dashStats.pending        : employees.filter(e=>e.status==="Pending").length;
+  const unpaidCount    = dashStats ? dashStats.unpaid         : employees.filter(e=>e.status==="Unpaid").length;
   const totalEmployees = dashStats ? dashStats.employee_count : employees.length;
 
-  const filtered = employees.filter(e=>{
-    const q=search.toLowerCase();
-    return (e.name.toLowerCase().includes(q)||e.id.toLowerCase().includes(q)||e.role.toLowerCase().includes(q))
-      &&(dept==="All"||e.dept===dept)&&(status==="All"||e.status===status);
-  }).sort((a,b)=>{ let va=a[sortBy],vb=b[sortBy]; if(typeof va==="string"){va=va.toLowerCase();vb=vb.toLowerCase();} return sortDir==="asc"?(va>vb?1:-1):(va<vb?1:-1); });
+  const filtered = employees.filter(e => {
+    const q = search.toLowerCase();
+    const nameMatch   = (e.name  || "").toLowerCase().includes(q);
+    const idMatch     = (e.id    || "").toLowerCase().includes(q);
+    const roleMatch   = (e.role  || "").toLowerCase().includes(q);
+    const deptMatch   = dept   === "All" || e.dept   === dept;
+    const statusMatch = status === "All" || e.status === status;
+    return (nameMatch || idMatch || roleMatch) && deptMatch && statusMatch;
+  }).sort((a,b) => {
+    let va = a[sortBy] ?? "", vb = b[sortBy] ?? "";
+    if (typeof va === "string") { va = va.toLowerCase(); vb = (vb||"").toLowerCase(); }
+    return sortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
 
-  const totalPages = Math.max(1,Math.ceil(filtered.length/rowsPerPage));
-  const paginated  = filtered.slice((page-1)*rowsPerPage,page*rowsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const paginated  = filtered.slice((page-1)*rowsPerPage, page*rowsPerPage);
 
-  const toggleSort=(col)=>{if(sortBy===col)setSortDir(d=>d==="asc"?"desc":"asc");else{setSortBy(col);setSortDir("asc");}};
-  const toggleRow=(id)=>setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
-  const toggleAll=()=>{if(selectedIds.size===paginated.length)setSelectedIds(new Set());else setSelectedIds(new Set(paginated.map(e=>e.id)));};
-  const handleSaveEdit=(updated)=>setEmployees(prev=>prev.map(e=>e.id===updated.id?updated:e));
-  const handleDelete=()=>{setEmployees(prev=>prev.filter(e=>e.id!==deleteEmp.id));setDeleteEmp(null);};
+  const toggleSort = (col) => { if(sortBy===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortBy(col); setSortDir("asc"); } };
+  const toggleRow  = (id)  => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const toggleAll  = ()    => { if(selectedIds.size===paginated.length) setSelectedIds(new Set()); else setSelectedIds(new Set(paginated.map(e=>e.id))); };
+  const handleSaveEdit = (updated) => setEmployees(prev => prev.map(e => e.id===updated.id ? updated : e));
+  const handleDelete   = () => { setEmployees(prev => prev.filter(e => e.id!==deleteEmp.id)); setDeleteEmp(null); };
 
-  const SortIcon=({col})=>(<svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={sortBy===col?ACCENT:"#d1d5db"} strokeWidth={2.5} strokeLinecap="round"><path d={sortBy===col&&sortDir==="asc"?"M8 15l4 4 4-4M12 19V5":sortBy===col&&sortDir==="desc"?"M8 9l4-4 4 4M12 5v14":"M8 9l4-4 4 4M8 15l4 4 4-4"}/></svg>);
+  const SortIcon = ({col}) => (
+    <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={sortBy===col?ACCENT:"#d1d5db"} strokeWidth={2.5} strokeLinecap="round">
+      <path d={sortBy===col&&sortDir==="asc"?"M8 15l4 4 4-4M12 19V5":sortBy===col&&sortDir==="desc"?"M8 9l4-4 4 4M12 5v14":"M8 9l4-4 4 4M8 15l4 4 4-4"}/>
+    </svg>
+  );
 
   const TABS = [
     {key:"salary",     label:"Employee Salary",   icon:ICONS.users},
@@ -1402,21 +1419,19 @@ export default function EmployeeSalaryPage() {
       {/* ── EMPLOYEE SALARY TAB ── */}
       {activeTab==="salary"&&(<>
 
-        {/* STAT CARDS */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-          <StatCard icon={ICONS.wallet}    iconBg="linear-gradient(135deg,#1e293b,#374151)" label="Total Gross Payroll" value={fmtShort(totalGross)}     sub={`${totalEmployees} employee${totalEmployees!==1?"s":""}`} trend={7}  loading={loadingStats}/>
-          <StatCard icon={ICONS.trending}  iconBg="linear-gradient(135deg,#16a34a,#15803d)" label="Net Payroll"         value={fmtShort(totalNet)}       sub="After all deductions"   subColor="#16a34a" trend={5}  loading={loadingStats}/>
-          <StatCard icon={ICONS.fileText}  iconBg="linear-gradient(135deg,#dc2626,#b91c1c)" label="Total Deductions"    value={fmtShort(totalDeduction)} sub="Tax + PF + Insurance"   trend={-2} loading={loadingStats}/>
-          <StatCard icon={ICONS.users}     iconBg="linear-gradient(135deg,#6366f1,#4f46e5)" label="Payment Status"      value={`${paidCount} Paid`}      sub={`${pendingCount} Pending · ${unpaidCount} Unpaid`} subColor="#d97706" loading={loadingStats}/>
+          <StatCard icon={ICONS.wallet}   iconBg="linear-gradient(135deg,#1e293b,#374151)" label="Total Gross Payroll" value={fmtShort(totalGross)}     sub={`${totalEmployees} employee${totalEmployees!==1?"s":""}`} trend={7}  loading={loadingStats}/>
+          <StatCard icon={ICONS.trending} iconBg="linear-gradient(135deg,#16a34a,#15803d)" label="Net Payroll"         value={fmtShort(totalNet)}       sub="After all deductions"  subColor="#16a34a" trend={5}  loading={loadingStats}/>
+          <StatCard icon={ICONS.fileText} iconBg="linear-gradient(135deg,#dc2626,#b91c1c)" label="Total Deductions"    value={fmtShort(totalDeduction)} sub="Tax + PF + Insurance"  trend={-2} loading={loadingStats}/>
+          <StatCard icon={ICONS.users}    iconBg="linear-gradient(135deg,#6366f1,#4f46e5)" label="Payment Status"      value={`${paidCount} Paid`}      sub={`${pendingCount} Pending · ${unpaidCount} Unpaid`} subColor="#d97706" loading={loadingStats}/>
         </div>
 
-        {/* QUICK FILTER PILLS */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {[
             {label:"All Employees",count:employees.length,color:"#6366f1",bg:"#eef2ff",filter:"All"},
-            {label:"Paid",         count:paidCount,        color:"#16a34a",bg:"#f0fdf4",filter:"Paid"},
-            {label:"Pending",      count:pendingCount,     color:"#d97706",bg:"#fffbeb",filter:"Pending"},
-            {label:"Unpaid",       count:unpaidCount,      color:"#dc2626",bg:"#fef2f2",filter:"Unpaid"},
+            {label:"Paid",         count:paidCount,       color:"#16a34a",bg:"#f0fdf4",filter:"Paid"},
+            {label:"Pending",      count:pendingCount,    color:"#d97706",bg:"#fffbeb",filter:"Pending"},
+            {label:"Unpaid",       count:unpaidCount,     color:"#dc2626",bg:"#fef2f2",filter:"Unpaid"},
           ].map(({label,count,color,bg,filter:f})=>(
             <div key={label} onClick={()=>{setStatus(f);setPage(1);}}
               style={{display:"flex",alignItems:"center",gap:7,padding:"8px 16px",background:status===f?bg:bg+"88",borderRadius:99,cursor:"pointer",border:`1.5px solid ${status===f?color+"55":"transparent"}`,transition:"all 0.15s"}}>
@@ -1426,18 +1441,9 @@ export default function EmployeeSalaryPage() {
           ))}
         </div>
 
-        {/* ── CHARTS — now fed from API ── */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:12}}>
-          <SalaryBarChart
-            data={filteredMonthly}
-            loading={loadingStats}
-            period={period}
-            onPeriodChange={setPeriod}
-          />
-          <DeptDonut
-            deptData={deptBreakdown}
-            loading={loadingStats}
-          />
+          <SalaryBarChart data={filteredMonthly} loading={loadingStats} period={period} onPeriodChange={setPeriod}/>
+          <DeptDonut deptData={deptBreakdown} loading={loadingStats}/>
         </div>
 
         {/* TABLE */}
@@ -1487,22 +1493,30 @@ export default function EmployeeSalaryPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length===0?(
+                {loadingEmps ? (
+                  <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10}}><Spinner size={18} color={ACCENT}/><span style={{fontWeight:700}}>Loading employees…</span></div>
+                  </td></tr>
+                ) : errorEmps ? (
+                  <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#dc2626",fontSize:13}}>
+                    <div style={{fontSize:32,marginBottom:10}}>⚠️</div><div style={{fontWeight:700}}>{errorEmps}</div>
+                  </td></tr>
+                ) : paginated.length===0 ? (
                   <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>
                     <div style={{fontSize:32,marginBottom:10}}>🔍</div><div style={{fontWeight:700}}>No salary records found</div>
                   </td></tr>
-                ):paginated.map(emp=>{
-                  const isChecked=selectedIds.has(emp.id);
+                ) : paginated.map(emp => {
+                  const isChecked = selectedIds.has(emp.id);
                   return (
                     <tr key={emp.id} className="sal-row" style={{borderTop:"1px solid #f3f4f6",background:isChecked?`${ACCENT}06`:"#fff",transition:"background 0.12s"}}>
                       <td style={{padding:"12px 16px",textAlign:"center"}}><input type="checkbox" checked={isChecked} onChange={()=>toggleRow(emp.id)} style={{width:13,height:13,cursor:"pointer",accentColor:ACCENT}}/></td>
                       <td style={{padding:"12px 12px 12px 0"}}><span style={{fontSize:11.5,fontWeight:800,color:"#9ca3af"}}>{emp.id}</span></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={emp.name} size={32}/><div><div style={{fontSize:12.5,fontWeight:800,color:"#111827",whiteSpace:"nowrap"}}>{emp.name}</div><div style={{fontSize:10.5,color:"#9ca3af",marginTop:1,fontWeight:600}}>{emp.role}</div></div></div></td>
+                      <td style={{padding:"12px 12px 12px 0"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={emp.name||"?"} size={32}/><div><div style={{fontSize:12.5,fontWeight:800,color:"#111827",whiteSpace:"nowrap"}}>{emp.name}</div><div style={{fontSize:10.5,color:"#9ca3af",marginTop:1,fontWeight:600}}>{emp.role}</div></div></div></td>
                       <td style={{padding:"12px 12px 12px 0"}}><DeptBadge dept={emp.dept}/></td>
                       <td style={{padding:"12px 12px 12px 0"}}><GradeBadge grade={emp.salaryGrade||"Basic"}/></td>
                       <td style={{padding:"12px 12px 12px 0"}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <div style={{width:34,height:5,borderRadius:3,background:"#f1f5f9",overflow:"hidden"}}><div style={{width:`${(emp.paid_days/emp.work_days)*100}%`,height:"100%",background:emp.paid_days===emp.work_days?"#22c55e":"#f59e0b",borderRadius:3}}/></div>
+                          <div style={{width:34,height:5,borderRadius:3,background:"#f1f5f9",overflow:"hidden"}}><div style={{width:`${emp.work_days>0?(emp.paid_days/emp.work_days)*100:0}%`,height:"100%",background:emp.paid_days===emp.work_days?"#22c55e":"#f59e0b",borderRadius:3}}/></div>
                           <span style={{fontSize:11.5,fontWeight:700,color:"#374151"}}>{emp.paid_days}/{emp.work_days}</span>
                         </div>
                       </td>
@@ -1540,7 +1554,6 @@ export default function EmployeeSalaryPage() {
         </div>
       </>)}
 
-      {/* ── SALARY STRUCTURES TAB ── */}
       {activeTab==="structures" && (
         <SalaryStructuresSection
           showAddStructure={showAddStructure}
@@ -1550,10 +1563,8 @@ export default function EmployeeSalaryPage() {
         />
       )}
 
-      {/* ── PAYROLL SETTINGS TAB ── */}
       {activeTab==="settings" && <PayrollSettingsPanel/>}
 
-      {/* MODALS */}
       {viewEmp   && <PayslipModal emp={viewEmp} month={month} onClose={()=>setViewEmp(null)}/>}
       {editEmp   && <EditSalaryModal emp={editEmp} onClose={()=>setEditEmp(null)} onSave={handleSaveEdit}/>}
       {deleteEmp && <ConfirmModal emp={deleteEmp} onClose={()=>setDeleteEmp(null)} onConfirm={handleDelete}/>}

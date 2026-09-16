@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 // ─── API CONFIG ────────────────────────────────────────────────────────────
-const API_BASE = "https://pencilkraft.in/api/admin/productivity/dashboard";
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/admin/productivity/dashboard`;
 const AUTH_TOKEN = "416|qu2wN0p3iQaewkDPVqfGwckDYyspTXag8Z8jmZU3dab4a47f";
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────

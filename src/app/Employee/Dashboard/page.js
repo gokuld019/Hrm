@@ -16,7 +16,7 @@ import ProjectsPage from "../Projects/page";
 import TasksPage from "../Task/page";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BASE = "";
+const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
   Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",

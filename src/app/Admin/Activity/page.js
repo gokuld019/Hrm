@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 // ─── API ───────────────────────────────────────────────────────────────────
-const API_BASE = "https://pencilkraft.in/api/admin/activity/dashboard";
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/admin/activity/dashboard`;
 
 const PERIOD_MAP = { Today: "day", Yesterday: "day", Week: "week", Month: "month", Year: "year" };
 

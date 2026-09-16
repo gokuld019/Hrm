@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const BASE = "https://pencilkraft.in/api/employee";
+const BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/employee`;
 
 function getToken() {
   if (typeof window === "undefined") return null;
