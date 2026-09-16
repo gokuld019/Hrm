@@ -4,8 +4,10 @@ import {
   Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search, 
   Loader2, CircleCheck, CircleAlert, AlertTriangle, TriangleAlert, Building2, Hash, FileText, 
   Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard, 
-  Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays 
-} from "lucide-react";import confetti from "canvas-confetti";
+  Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays,
+  Clock, User, Flag, Briefcase, Eye, MessageSquare, Paperclip, CalendarClock
+} from "lucide-react";
+import confetti from "canvas-confetti";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 
@@ -36,12 +38,30 @@ const statusColors = {
   Completed:    "bg-green-100 text-green-700",
   completed:    "bg-green-100 text-green-700",
   onhold:       "bg-yellow-100 text-yellow-700",
+  planning:     "bg-indigo-100 text-indigo-700",
+  Planning:     "bg-indigo-100 text-indigo-700",
 };
 
 const PROJECT_COLORS = ["#6366f1","#22c55e","#06b6d4","#f97316","#ec4899","#8b5cf6"];
 const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
 const palette = ["#6366f1","#14b8a6","#f97316","#ec4899","#22c55e","#a855f7","#eab308","#ef4444","#06b6d4"];
 const getColor = (i) => palette[i % palette.length];
+
+// ── Date formatter ────────────────────────────────────────────────────
+const fmtDate = (iso, opts = { day:"2-digit", month:"short", year:"numeric" }) => {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleDateString("en-GB", opts); }
+  catch { return "—"; }
+};
+
+const fmtDateTime = (iso) => {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"
+    });
+  } catch { return "—"; }
+};
 
 // ── Avatar ────────────────────────────────────────────────────────────
 const Avatar = ({ initials, color, size = "w-7 h-7" }) => (
@@ -285,6 +305,289 @@ function SuccessModal({ message, onClose }) {
         </div>
         <style>{`@keyframes shrink { from { width: 100%; } to { width: 0%; } }`}</style>
         <button onClick={onClose} className="mt-4 px-6 py-2 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer">Close</button>
+      </div>
+    </div>
+  );
+}
+
+// ── TASK DETAIL MODAL — fetches full details on open ──────────────────
+function TaskDetailModal({ taskId, onClose, onStatusChange }) {
+  const [task, setTask] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    if (!taskId) return;
+    let cancelled = false;
+    const fetchDetail = async () => {
+      setLoading(true); setError(null);
+      try {
+        const res = await fetch(`${BASE}/api/admin/tasks/${taskId}`, { headers: authHeaders() });
+        if (!res.ok) throw new Error(`Failed to load task (${res.status})`);
+        const data = await res.json();
+        if (!cancelled) setTask(data.data || data);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchDetail();
+    return () => { cancelled = true; };
+  }, [taskId]);
+
+  const toggleStatus = async () => {
+    if (!task) return;
+    const newStatus = task.status === "completed" ? "pending" : "completed";
+    setUpdating(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      setTask(prev => ({ ...prev, status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null }));
+      onStatusChange?.();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const priorityClass = task?.priority ? (priorityColors[task.priority.toLowerCase()] || "bg-gray-100 text-gray-600") : "bg-gray-100 text-gray-600";
+  const statusClass = task?.status ? (statusColors[task.status] || "bg-gray-100 text-gray-600") : "bg-gray-100 text-gray-600";
+  const project = task?.project;
+  const creator = task?.creator;
+  const assignees = task?.assignees || [];
+  const isDone = ["completed","done"].includes((task?.status || "").toLowerCase());
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 flex flex-col max-h-[92vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-gray-100 shrink-0">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDone ? "bg-green-100" : "bg-orange-100"}`}>
+              {isDone ? <CheckCheck size={18} className="text-green-600" /> : <FileText size={18} className="text-orange-500" />}
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-gray-900 truncate">
+                {loading ? "Loading task…" : (task?.title || "Task")}
+              </h2>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {task?.id != null && (
+                  <span className="text-[10px] font-mono text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded">
+                    #{task.id}
+                  </span>
+                )}
+                {task?.priority && (
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${priorityClass}`}>
+                    {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                  </span>
+                )}
+                {task?.status && (
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusClass}`}>
+                    • {task.status}
+                  </span>
+                )}
+                {task?.currently_overdue && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 flex items-center gap-1">
+                    <AlertTriangle size={9} /> Overdue
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition shrink-0 cursor-pointer">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-5">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+              <Loader2 size={24} className="animate-spin text-orange-400" />
+              <span className="text-sm">Loading task details…</span>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="flex items-start gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {!loading && !error && task && (
+            <div className="space-y-5">
+              {/* Description */}
+              {task.description && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Description</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    {task.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Dates grid */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Timeline</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <CalendarDays size={11} className="text-gray-400" />
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Start Date</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800">{fmtDate(task.start_date)}</p>
+                  </div>
+                  <div className={`rounded-xl p-3 border ${task.currently_overdue ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-100"}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <CalendarClock size={11} className={task.currently_overdue ? "text-red-500" : "text-gray-400"} />
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${task.currently_overdue ? "text-red-500" : "text-gray-400"}`}>Due Date</p>
+                    </div>
+                    <p className={`text-sm font-semibold ${task.currently_overdue ? "text-red-700" : "text-gray-800"}`}>{fmtDate(task.due_date)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Project card */}
+              {project && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Project</p>
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50/40 rounded-xl p-3 border border-orange-100 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {(project.project_name || "P")[0]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{project.project_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[10px] font-mono text-orange-600 bg-white/70 border border-orange-100 px-1.5 py-0.5 rounded">
+                          {project.project_code}
+                        </span>
+                        {project.status && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[project.status] || "bg-gray-100 text-gray-600"}`}>
+                            • {project.status}
+                          </span>
+                        )}
+                        {project.priority && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${priorityColors[project.priority.toLowerCase()] || "bg-gray-100 text-gray-600"}`}>
+                            {project.priority}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Assignees */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                  Assignees {assignees.length > 0 && <span className="text-gray-300 normal-case font-medium">({assignees.length})</span>}
+                </p>
+                {assignees.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No assignees</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {assignees.map((a, i) => {
+                      const initials = ((a.firstname?.[0] || "") + (a.lastname?.[0] || "")).toUpperCase() || "?";
+                      const fullName = `${a.firstname || ""} ${a.lastname || ""}`.trim() || a.username || a.email || `Employee ${a.id}`;
+                      return (
+                        <div key={a.id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-0.5 pr-3 py-0.5 shadow-sm">
+                          {a.profile_image ? (
+                            <img src={a.profile_image} alt={fullName} className="w-7 h-7 rounded-full object-cover border-2 border-white" />
+                          ) : (
+                            <Avatar initials={initials} color={getColor(i)} />
+                          )}
+                          <div className="leading-tight">
+                            <p className="text-xs font-semibold text-gray-800">{fullName}</p>
+                            {a.employee_id && <p className="text-[9px] text-gray-400 font-mono">{a.employee_id}</p>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Creator + meta */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                {creator && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created By</p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                        {(creator.name || creator.username || "?")[0].toUpperCase()}
+                      </div>
+                      <div className="leading-tight min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 truncate">{creator.name || creator.username}</p>
+                        {creator.email && <p className="text-[10px] text-gray-400 truncate">{creator.email}</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created On</p>
+                  <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                    <Clock size={11} className="text-gray-400" />
+                    {fmtDateTime(task.created_at)}
+                  </p>
+                  {task.updated_at && task.updated_at !== task.created_at && (
+                    <p className="text-[10px] text-gray-400 mt-1">Updated {fmtDateTime(task.updated_at)}</p>
+                  )}
+                </div>
+              </div>
+
+              {task.completed_at && (
+                <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-2">
+                  <CheckCheck size={14} className="text-green-600 shrink-0" />
+                  <p className="text-xs text-green-700">
+                    <span className="font-semibold">Completed on</span> {fmtDateTime(task.completed_at)}
+                  </p>
+                </div>
+              )}
+
+              {task.attachment && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-2">
+                  <Paperclip size={13} className="text-blue-600 shrink-0" />
+                  <a href={task.attachment} target="_blank" rel="noreferrer" className="text-xs text-blue-700 font-semibold underline truncate">
+                    View attachment
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+            Close
+          </button>
+          {task && (
+            <button
+              onClick={toggleStatus}
+              disabled={updating}
+              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-50 cursor-pointer
+                ${isDone ? "bg-gray-500 hover:bg-gray-600" : "bg-green-500 hover:bg-green-600"}`}
+            >
+              {updating ? (
+                <><Loader2 size={14} className="animate-spin" />Updating…</>
+              ) : isDone ? (
+                <><RotateCw size={14} />Mark as Pending</>
+              ) : (
+                <><CheckCheck size={14} />Mark as Completed</>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1166,7 +1469,7 @@ function AddProjectModal({ onClose, onSuccess }) {
   );
 }
 
-// ── ADD TASK MODAL (UPDATED WITH ADD PROJECT BUTTON) ─────────────────────────────────────────────────
+// ── ADD TASK MODAL ─────────────────────────────────────────────────
 function AddTaskModal({ onClose, onSuccess }) {
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -1502,6 +1805,9 @@ export default function TasksPage() {
   const [completingTaskTitle, setCompletingTaskTitle] = useState("");
   const [updatingTask, setUpdatingTask] = useState(false);
 
+  // 👇 New state for task detail modal
+  const [detailTaskId, setDetailTaskId] = useState(null);
+
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -1700,10 +2006,16 @@ export default function TasksPage() {
                   <p className="text-sm text-gray-400 text-center py-8">No {priority.toLowerCase()} priority tasks.</p>
                 ) : (
                   displayItems.map(task => (
-                    <div key={task.id}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all">
+                    <div
+                      key={task.id}
+                      onClick={() => setDetailTaskId(task.id)}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all cursor-pointer group"
+                    >
                       <button
-                        onClick={() => updateTaskStatus(task.id, task.done ? "completed" : "pending", task.title)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateTaskStatus(task.id, task.done ? "completed" : "pending", task.title);
+                        }}
                         disabled={updatingTask}
                         className="cursor-pointer text-gray-400 disabled:opacity-50"
                       >
@@ -1722,6 +2034,7 @@ export default function TasksPage() {
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[task.status] || "bg-gray-100 text-gray-500"}`}>
                         • {task.status}
                       </span>
+                      <Eye size={13} className="text-gray-300 group-hover:text-orange-500 transition-colors shrink-0" />
                     </div>
                   ))
                 )}
@@ -1746,6 +2059,15 @@ export default function TasksPage() {
         <CompletionModal
           taskTitle={completingTaskTitle}
           onClose={() => setShowCompletionModal(false)}
+        />
+      )}
+
+      {/* 👇 Task Detail Modal */}
+      {detailTaskId && (
+        <TaskDetailModal
+          taskId={detailTaskId}
+          onClose={() => setDetailTaskId(null)}
+          onStatusChange={fetchTasks}
         />
       )}
     </div>

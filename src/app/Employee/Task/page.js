@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-const BASE = "";
+const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
   Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
@@ -34,6 +34,7 @@ const I = {
   circle:     "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z",
   tag:        "M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01",
   user:       "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  grip:       "M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01",
 };
 
 const PRIORITY_CFG = {
@@ -41,16 +42,34 @@ const PRIORITY_CFG = {
   medium: { dot: "#f59e0b", bg: "#fffbeb", text: "#d97706", label: "Medium", bar: "#f59e0b" },
   low:    { dot: "#22c55e", bg: "#f0fdf4", text: "#16a34a", label: "Low",    bar: "#22c55e" },
 };
+
+// Matches DB enum exactly: pending, in_progress, completed, overdue
 const STATUS_CFG = {
   pending:     { bg: "#fef9c3", text: "#854d0e", dot: "#f59e0b", label: "Pending",     col: "#f59e0b", icon: I.circle      },
   in_progress: { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "In Progress", col: "#3b82f6", icon: I.clock       },
+  overdue:     { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Overdue",     col: "#ef4444", icon: I.alertCircle },
   completed:   { bg: "#dcfce7", text: "#166534", dot: "#22c55e", label: "Completed",   col: "#22c55e", icon: I.checkCircle },
-  on_hold:     { bg: "#f3f4f6", text: "#6b7280", dot: "#94a3b8", label: "On Hold",     col: "#94a3b8", icon: I.alertCircle },
-  planning:    { bg: "#ede9fe", text: "#5b21b6", dot: "#8b5cf6", label: "Planning",    col: "#8b5cf6", icon: I.circle      },
 };
 
-const statusKey = s => (s ?? "").toLowerCase().replace(/\s+/g, "_");
+const STATUSES = ["pending", "in_progress", "overdue", "completed"];
+
+const statusKey = s => {
+  const k = (s ?? "").toLowerCase().replace(/\s+/g, "_");
+  return STATUS_CFG[k] ? k : "pending";
+};
 const priorityKey = p => (p ?? "").toLowerCase();
+
+// ── Auto-overdue: if due_date passed and not completed, treat as overdue ──
+const effectiveStatus = (task) => {
+  const raw = statusKey(task?.status);
+  if (raw === "completed") return "completed";
+  if (task?.due_date) {
+    const due = new Date(task.due_date);
+    due.setHours(23, 59, 59, 999);
+    if (new Date() > due) return "overdue";
+  }
+  return raw;
+};
 
 const Spinner = ({ size = 20, color = "#f97316" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", display: "block" }}>
@@ -63,60 +82,315 @@ function PBadge({ p }) {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, background: c.bg, fontSize: 10, fontWeight: 700, color: c.text }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: c.dot }} />{c.label}</span>;
 }
 function SBadge({ s }) {
-  const c = STATUS_CFG[statusKey(s)] || { bg: "#f3f4f6", text: "#6b7280", dot: "#94a3b8", label: s };
+  const c = STATUS_CFG[statusKey(s)];
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, background: c.bg, fontSize: 10, fontWeight: 700, color: c.text }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: c.dot }} />{c.label}</span>;
 }
 
+// ─── Kanban Card ──────────────────────────────────────────────────────────────
+function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd, isDragging, updating }) {
+  const st = effectiveStatus(t);
+  const done = completedIds.has(t.id) || st === "completed";
+  const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
+
+  return (
+    <div
+      draggable={!updating}
+      onDragStart={(e) => onDragStart(e, t)}
+      onDragEnd={onDragEnd}
+      style={{
+        background: "#fff",
+        borderRadius: 12,
+        border: `1px solid ${done ? "#dcfce7" : "#f1f5f9"}`,
+        padding: "12px 14px",
+        cursor: updating ? "wait" : "grab",
+        transition: "opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+        opacity: isDragging ? 0 : 1,
+        transform: isDragging ? "scale(0.96)" : "scale(1)",
+        position: "relative",
+      }}
+      onMouseEnter={e => {
+        if (isDragging) return;
+        e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.10)";
+        e.currentTarget.style.borderColor = pc.dot;
+        e.currentTarget.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.boxShadow = "none";
+        e.currentTarget.style.borderColor = done ? "#dcfce7" : "#f1f5f9";
+        e.currentTarget.style.transform = "scale(1)";
+      }}
+    >
+      {/* grip hint, top right */}
+      <div style={{ position: "absolute", top: 10, right: 10, opacity: 0.25 }}>
+        <Ico d={I.grip} size={12} stroke="#94a3b8" />
+      </div>
+
+      {/* Priority bar */}
+      <div style={{ height: 2, background: pc.bar, borderRadius: 1, marginBottom: 10, opacity: 0.7 }} />
+
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+        <div
+          onClick={(e) => { e.stopPropagation(); onToggle(t.id); }}
+          style={{
+            width: 18, height: 18, borderRadius: 5,
+            border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`,
+            background: done ? "#22c55e" : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", flexShrink: 0, marginTop: 1, transition: "all 0.15s",
+          }}
+        >
+          {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
+        </div>
+        <span
+          onClick={(e) => { e.stopPropagation(); onOpen(t.id); }}
+          style={{
+            fontSize: 13, fontWeight: 600,
+            color: done ? "#94a3b8" : "#1e293b",
+            lineHeight: 1.4,
+            textDecoration: done ? "line-through" : "none",
+            transition: "all 0.15s", paddingRight: 12,
+            cursor: "pointer",
+          }}
+        >{t.title}</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <PBadge p={t.priority} />
+        {t.due_date && (
+          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400 }}>
+            <Ico d={I.calendar} size={10} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />
+            {new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+          </span>
+        )}
+      </div>
+
+      {t.project && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 5 }}>
+          <Ico d={I.folder} size={11} stroke="#94a3b8" />
+          <span style={{ fontSize: 10, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.project.project_name ?? "Project"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Kanban Column ────────────────────────────────────────────────────────────
-function KanbanCol({ status, tasks, onToggle, completedIds }) {
-  const cfg = STATUS_CFG[statusKey(status)] || STATUS_CFG.pending;
+function KanbanCol({ status, tasks, onToggle, onOpen, completedIds, onDrop, onDragStart, onDragEnd, draggingId, dragOverCol, onDragEnter, onDragLeave, updatingId }) {
+  const cfg = STATUS_CFG[statusKey(status)];
+  const isOver = dragOverCol === status;
+  const isOverdueCol = status === "overdue";
+
   return (
     <div style={{ flex: "0 0 280px", display: "flex", flexDirection: "column", gap: 0 }}>
       {/* Column header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#fff", borderRadius: "14px 14px 0 0", border: "1px solid #f1f5f9", borderBottom: `2px solid ${cfg.col}`, marginBottom: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#fff", borderRadius: "14px 14px 0 0", border: "1px solid #f1f5f9", borderBottom: `2px solid ${cfg.col}` }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.col, flexShrink: 0 }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", flex: 1 }}>{cfg.label}</span>
         <span style={{ fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.text, borderRadius: 20, padding: "1px 8px" }}>{tasks.length}</span>
       </div>
-      {/* Cards */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#f8fafc", borderRadius: "0 0 14px 14px", border: "1px solid #f1f5f9", borderTop: "none", padding: 10, minHeight: 100 }}>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => { if (!isOverdueCol) e.preventDefault(); }}
+        onDragEnter={() => { if (!isOverdueCol) onDragEnter(status); }}
+        onDragLeave={onDragLeave}
+        onDrop={(e) => onDrop(e, status)}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          background: isOver ? `${cfg.col}0D` : "#f8fafc",
+          borderRadius: "0 0 14px 14px",
+          border: `1px solid ${isOver ? cfg.col + "55" : "#f1f5f9"}`,
+          borderTop: "none",
+          padding: 10,
+          minHeight: 140,
+          transition: "background 0.15s ease, border-color 0.15s ease",
+        }}
+      >
         {tasks.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "24px 0", color: "#cbd5e1", fontSize: 12 }}>No tasks</div>
-        ) : tasks.map(t => {
-          const done = completedIds.has(t.id);
-          const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
-          return (
-            <div key={t.id} style={{ background: "#fff", borderRadius: 12, border: `1px solid ${done ? "#dcfce7" : "#f1f5f9"}`, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; e.currentTarget.style.borderColor = pc.dot; }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = done ? "#dcfce7" : "#f1f5f9"; }}>
-              {/* Priority bar */}
-              <div style={{ height: 2, background: pc.bar, borderRadius: 1, marginBottom: 10, opacity: 0.7 }} />
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-                <div onClick={() => onToggle(t.id)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 1, transition: "all 0.15s" }}>
-                  {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 600, color: done ? "#94a3b8" : "#1e293b", lineHeight: 1.4, textDecoration: done ? "line-through" : "none", transition: "all 0.15s" }}>{t.title}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <PBadge p={t.priority} />
-                {t.due_date && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#94a3b8" }}>
-                    <Ico d={I.calendar} size={10} stroke="#94a3b8" />
-                    {new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                  </span>
-                )}
-              </div>
-              {t.project && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 5 }}>
-                  <Ico d={I.folder} size={11} stroke="#94a3b8" />
-                  <span style={{ fontSize: 10, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.project.project_name ?? "Project"}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
+          <div style={{
+            textAlign: "center",
+            padding: "28px 0",
+            color: isOver ? cfg.col : "#cbd5e1",
+            fontSize: 12,
+            fontWeight: isOver ? 700 : 400,
+            border: `2px dashed ${isOver ? cfg.col : "transparent"}`,
+            borderRadius: 10,
+            transition: "all 0.15s ease",
+          }}>
+            {isOver ? "Drop here" : (isOverdueCol ? "Auto-managed" : "No tasks")}
+          </div>
+        ) : (
+          <>
+            {tasks.map(t => (
+              <KanbanCard
+                key={t.id}
+                t={t}
+                onToggle={onToggle}
+                onOpen={onOpen}
+                completedIds={completedIds}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                isDragging={draggingId === t.id}
+                updating={updatingId === t.id}
+              />
+            ))}
+            {isOver && draggingId && !isOverdueCol && (
+              <div style={{
+                height: 56,
+                borderRadius: 12,
+                border: `2px dashed ${cfg.col}`,
+                background: `${cfg.col}0D`,
+                animation: "pulseBox 1.1s ease-in-out infinite",
+              }} />
+            )}
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+// ─── Task Detail Drawer ───────────────────────────────────────────────────────
+function MetaRow({ icon, label, value, danger }) {
+  return (
+    <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 3 }}>
+        <Ico d={icon} size={11} stroke="#94a3b8" />
+        {label}
+      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: danger ? "#dc2626" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
+  if (!task) return null;
+  const st = effectiveStatus(task);
+  const sc = STATUS_CFG[st];
+  const pc = PRIORITY_CFG[priorityKey(task.priority)] || PRIORITY_CFG.medium;
+
+  const fmt = (d) => d ? new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric"
+  }) : "—";
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
+        zIndex: 200, animation: "fadeIn 0.15s ease",
+      }} />
+
+      {/* Drawer */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 460,
+        maxWidth: "92vw", background: "#fff", zIndex: 201,
+        boxShadow: "-12px 0 40px rgba(0,0,0,0.14)",
+        display: "flex", flexDirection: "column",
+        animation: "slideIn 0.22s ease",
+        fontFamily: "'Plus Jakarta Sans',-apple-system,sans-serif",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "18px 22px", borderBottom: "1px solid #f1f5f9",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+              Task #{task.id ?? "—"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb",
+            background: "#fff", cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}>
+            <Ico d={I.x} size={15} stroke="#6b7280" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "22px" }}>
+          {loading ? (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: 60 }}>
+              <Spinner />
+              <span style={{ fontSize: 13, color: "#94a3b8" }}>Loading task…</span>
+            </div>
+          ) : (
+            <>
+              <h2 style={{ margin: "0 0 12px", fontSize: 20, fontWeight: 800, color: "#0f172a", lineHeight: 1.35 }}>
+                {task.title}
+              </h2>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+                <SBadge s={st} />
+                <PBadge p={task.priority} />
+              </div>
+
+              {task.description && (
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 6 }}>
+                    Description
+                  </div>
+                  <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, background: "#f9fafb", borderRadius: 10, padding: "12px 14px", whiteSpace: "pre-wrap" }}>
+                    {task.description}
+                  </div>
+                </div>
+              )}
+
+              {/* Meta grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
+                <MetaRow icon={I.calendar} label="Start Date" value={fmt(task.start_date)} />
+                <MetaRow icon={I.calendar} label="Due Date" value={fmt(task.due_date)} danger={st === "overdue"} />
+                <MetaRow icon={I.folder} label="Project" value={task.project?.project_name ?? "—"} />
+                <MetaRow icon={I.user} label="Created By" value={task.creator?.name ?? "—"} />
+              </div>
+
+              {/* Status changer */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>
+                  Status
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {STATUSES.filter(s => s !== "overdue").map(s => {
+                    const c = STATUS_CFG[s];
+                    const active = st === s;
+                    return (
+                      <button key={s} onClick={() => onStatusChange(task, s)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          padding: "8px 14px", borderRadius: 10,
+                          border: `1.5px solid ${active ? c.col : "#e5e7eb"}`,
+                          background: active ? c.bg : "#fff",
+                          color: active ? c.text : "#6b7280",
+                          fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {st === "overdue" && (
+                  <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px" }}>
+                    <Ico d={I.alertCircle} size={16} stroke="#dc2626" />
+                    <span style={{ fontSize: 12, color: "#991b1b", fontWeight: 600 }}>
+                      This task is past its deadline
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -131,6 +405,15 @@ export default function TasksPage() {
   const [view, setView] = useState("kanban");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [search, setSearch] = useState("");
+
+  // drag state
+  const [draggingTask, setDraggingTask] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+
+  // detail drawer state
+  const [detailTask, setDetailTask] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -159,6 +442,72 @@ export default function TasksPage() {
     return n;
   });
 
+  // ── Update status via API, with optimistic UI ──────────────────────
+  const updateTaskStatus = async (task, newStatus) => {
+    const prevStatus = task.status;
+    setUpdatingId(task.id);
+
+    // optimistic update
+    setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+    // sync drawer if open
+    setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, status: newStatus } : prev);
+
+    try {
+      const res = await fetch(`${BASE}/api/employee/tasks/${task.id}/status`, {
+        method: "PUT",
+        headers: HEADERS(),
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+    } catch (e) {
+      console.error(e);
+      // revert on failure
+      setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: prevStatus } : t));
+      setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, status: prevStatus } : prev);
+      alert("Couldn't update task status. Please try again.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // ── Open task detail (fetch fresh) ─────────────────────────────────
+  const openTaskDetail = async (taskId) => {
+    // Use cached task object immediately for snappy UX
+    const cached = allTasks.find(t => t.id === taskId);
+    setDetailTask(cached ?? { id: taskId });
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/employee/tasks/${taskId}`, { headers: HEADERS() });
+      const json = await res.json();
+      if (json.success && json.data) setDetailTask(json.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // ── Drag handlers ───────────────────────────────────────────────────
+  const handleDragStart = (e, task) => {
+    setDraggingTask(task);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragEnd = () => {
+    setDraggingTask(null);
+    setDragOverCol(null);
+  };
+  const handleDrop = (e, newStatus) => {
+    e.preventDefault();
+    setDragOverCol(null);
+    if (!draggingTask) return;
+    // Block manual drop into Overdue — it's auto-managed
+    if (newStatus === "overdue") { setDraggingTask(null); return; }
+    const current = effectiveStatus(draggingTask);
+    if (current === newStatus) { setDraggingTask(null); return; }
+    updateTaskStatus(draggingTask, newStatus);
+    setDraggingTask(null);
+  };
+
   const filtered = allTasks.filter(t => {
     const matchP = selectedProject === "all" || t.project?.id === selectedProject;
     const matchPri = !priorityFilter || priorityKey(t.priority) === priorityFilter;
@@ -166,22 +515,26 @@ export default function TasksPage() {
     return matchP && matchPri && matchQ;
   });
 
-  const STATUSES = ["pending", "in_progress", "planning", "on_hold", "completed"];
   const byStatus = STATUSES.reduce((acc, s) => {
-    acc[s] = filtered.filter(t => statusKey(t.status) === s || (s === "pending" && !t.status));
+    acc[s] = filtered.filter(t => effectiveStatus(t) === s);
     return acc;
   }, {});
 
   const stats = {
-    total:    allTasks.length,
-    done:     allTasks.filter(t => statusKey(t.status) === "completed" || completedIds.has(t.id)).length,
-    high:     allTasks.filter(t => priorityKey(t.priority) === "high").length,
-    inprog:   allTasks.filter(t => statusKey(t.status) === "in_progress").length,
+    total:  allTasks.length,
+    done:   allTasks.filter(t => effectiveStatus(t) === "completed" || completedIds.has(t.id)).length,
+    high:   allTasks.filter(t => priorityKey(t.priority) === "high").length,
+    inprog: allTasks.filter(t => effectiveStatus(t) === "in_progress").length,
   };
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Plus Jakarta Sans',-apple-system,sans-serif", display: "flex", flexDirection: "column" }}>
-      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+        @keyframes pulseBox{0%,100%{opacity:0.55}50%{opacity:1}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+      `}</style>
 
       {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid #f1f5f9", padding: "14px 28px", display: "flex", alignItems: "center", gap: 14, position: "sticky", top: 0, zIndex: 100 }}>
@@ -191,7 +544,9 @@ export default function TasksPage() {
         </button>
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a" }}>My Tasks</h1>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Track and manage your work</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            {view === "kanban" ? "Drag a card to change its status · Click a title for details" : "Track and manage your work"}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "7px 12px" }}>
@@ -266,8 +621,23 @@ export default function TasksPage() {
           ) : view === "kanban" ? (
             /* ── Kanban ── */
             <div style={{ display: "flex", gap: 14, minWidth: "max-content", paddingBottom: 20 }}>
-              {STATUSES.filter(s => byStatus[s]?.length > 0 || true).map(s => (
-                <KanbanCol key={s} status={s} tasks={byStatus[s] ?? []} onToggle={toggle} completedIds={completedIds} />
+              {STATUSES.map(s => (
+                <KanbanCol
+                  key={s}
+                  status={s}
+                  tasks={byStatus[s] ?? []}
+                  onToggle={toggle}
+                  onOpen={openTaskDetail}
+                  completedIds={completedIds}
+                  onDrop={handleDrop}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  draggingId={draggingTask?.id}
+                  dragOverCol={dragOverCol}
+                  onDragEnter={setDragOverCol}
+                  onDragLeave={() => setDragOverCol(null)}
+                  updatingId={updatingId}
+                />
               ))}
             </div>
           ) : (
@@ -277,7 +647,7 @@ export default function TasksPage() {
               {(selectedProject === "all" ? projects : projects.filter(p => p.id === selectedProject)).map(proj => {
                 const projTasks = filtered.filter(t => t.project?.id === proj.id);
                 if (projTasks.length === 0) return null;
-                const doneCnt = projTasks.filter(t => completedIds.has(t.id) || statusKey(t.status) === "completed").length;
+                const doneCnt = projTasks.filter(t => completedIds.has(t.id) || effectiveStatus(t) === "completed").length;
                 return (
                   <div key={proj.id} style={{ borderBottom: "1px solid #f8fafc" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", background: "#f9fafb", borderBottom: "1px solid #f1f5f9" }}>
@@ -289,13 +659,15 @@ export default function TasksPage() {
                       </div>
                     </div>
                     {projTasks.map((t, i) => {
-                      const done = completedIds.has(t.id) || statusKey(t.status) === "completed";
+                      const st = effectiveStatus(t);
+                      const done = completedIds.has(t.id) || st === "completed";
                       const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
                       return (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < projTasks.length - 1 ? "1px solid #f8fafc" : "none" }}
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < projTasks.length - 1 ? "1px solid #f8fafc" : "none", cursor: "pointer" }}
+                          onClick={() => openTaskDetail(t.id)}
                           onMouseEnter={e => e.currentTarget.style.background = "#fffbf5"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div onClick={() => toggle(t.id)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}>
+                          <div onClick={(e) => { e.stopPropagation(); toggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}>
                             {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -304,10 +676,10 @@ export default function TasksPage() {
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <PBadge p={t.priority} />
-                            <SBadge s={t.status} />
+                            <SBadge s={st} />
                             {t.due_date && (
-                              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" }}>
-                                <Ico d={I.calendar} size={11} stroke="#94a3b8" />
+                              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400, whiteSpace: "nowrap" }}>
+                                <Ico d={I.calendar} size={11} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />
                                 {new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                               </span>
                             )}
@@ -332,16 +704,18 @@ export default function TasksPage() {
                       <span style={{ fontSize: 11, color: "#94a3b8" }}>{orphans.length} tasks</span>
                     </div>
                     {orphans.map((t, i) => {
-                      const done = completedIds.has(t.id) || statusKey(t.status) === "completed";
+                      const st = effectiveStatus(t);
+                      const done = completedIds.has(t.id) || st === "completed";
                       return (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < orphans.length - 1 ? "1px solid #f8fafc" : "none" }}
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < orphans.length - 1 ? "1px solid #f8fafc" : "none", cursor: "pointer" }}
+                          onClick={() => openTaskDetail(t.id)}
                           onMouseEnter={e => e.currentTarget.style.background = "#fffbf5"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div onClick={() => toggle(t.id)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                          <div onClick={(e) => { e.stopPropagation(); toggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
                             {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
                           </div>
                           <span style={{ flex: 1, fontSize: 13, color: done ? "#94a3b8" : "#1e293b", textDecoration: done ? "line-through" : "none" }}>{t.title}</span>
-                          <PBadge p={t.priority} /><SBadge s={t.status} />
+                          <PBadge p={t.priority} /><SBadge s={st} />
                         </div>
                       );
                     })}
@@ -352,6 +726,14 @@ export default function TasksPage() {
           )}
         </div>
       </div>
+
+      {/* Task Detail Drawer */}
+      <TaskDetailDrawer
+        task={detailTask}
+        loading={detailLoading}
+        onClose={() => { setDetailTask(null); setDetailLoading(false); }}
+        onStatusChange={(task, newStatus) => updateTaskStatus(task, newStatus)}
+      />
     </div>
   );
 }
