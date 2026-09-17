@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { 
-  Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search, 
-  Loader2, CircleCheck, CircleAlert, AlertTriangle, TriangleAlert, Building2, Hash, FileText, 
-  Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard, 
+import {
+  Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search,
+  Loader2, CircleCheck, CircleAlert, AlertTriangle, TriangleAlert, Building2, Hash, FileText,
+  Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard,
   Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays,
-  Clock, User, Flag, Briefcase, Eye, MessageSquare, Paperclip, CalendarClock
+  Clock, User, Flag, Briefcase, Eye, MessageSquare, Paperclip, CalendarClock, Sparkles,
+  LayoutGrid, MoreVertical, History
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -23,31 +24,37 @@ function authHeaders() {
 }
 
 const priorityColors = {
-  high:   "bg-red-100 text-red-700",
-  medium: "bg-yellow-100 text-yellow-700",
-  low:    "bg-green-100 text-green-700",
-  urgent: "bg-purple-100 text-purple-700",
+  high:   "bg-rose-50 text-rose-600 ring-1 ring-rose-100",
+  medium: "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+  low:    "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+  urgent: "bg-violet-50 text-violet-600 ring-1 ring-violet-100",
+};
+
+const priorityDot = {
+  high: "bg-rose-500",
+  medium: "bg-amber-500",
+  low: "bg-emerald-500",
+  urgent: "bg-violet-500",
 };
 
 const statusColors = {
-  Onhold:       "bg-yellow-100 text-yellow-700",
-  Inprogress:   "bg-blue-100 text-blue-700",
-  in_progress:  "bg-blue-100 text-blue-700",
-  Pending:      "bg-orange-100 text-orange-600",
-  pending:      "bg-orange-100 text-orange-600",
-  Completed:    "bg-green-100 text-green-700",
-  completed:    "bg-green-100 text-green-700",
-  onhold:       "bg-yellow-100 text-yellow-700",
-  planning:     "bg-indigo-100 text-indigo-700",
-  Planning:     "bg-indigo-100 text-indigo-700",
+  Onhold:       "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+  Inprogress:   "bg-sky-50 text-sky-600 ring-1 ring-sky-100",
+  in_progress:  "bg-sky-50 text-sky-600 ring-1 ring-sky-100",
+  Pending:      "bg-orange-50 text-orange-600 ring-1 ring-orange-100",
+  pending:      "bg-orange-50 text-orange-600 ring-1 ring-orange-100",
+  Completed:    "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+  completed:    "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+  onhold:       "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+  planning:     "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100",
+  Planning:     "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100",
+  overdue:      "bg-rose-50 text-rose-600 ring-1 ring-rose-100",
 };
 
 const PROJECT_COLORS = ["#6366f1","#22c55e","#06b6d4","#f97316","#ec4899","#8b5cf6"];
-const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
 const palette = ["#6366f1","#14b8a6","#f97316","#ec4899","#22c55e","#a855f7","#eab308","#ef4444","#06b6d4"];
 const getColor = (i) => palette[i % palette.length];
 
-// ── Date formatter ────────────────────────────────────────────────────
 const fmtDate = (iso, opts = { day:"2-digit", month:"short", year:"numeric" }) => {
   if (!iso) return "—";
   try { return new Date(iso).toLocaleDateString("en-GB", opts); }
@@ -63,16 +70,22 @@ const fmtDateTime = (iso) => {
   } catch { return "—"; }
 };
 
+const toDateInput = (iso) => {
+  if (!iso) return "";
+  try { return new Date(iso).toISOString().slice(0, 10); }
+  catch { return ""; }
+};
+
 // ── Avatar ────────────────────────────────────────────────────────────
 const Avatar = ({ initials, color, size = "w-7 h-7" }) => (
-  <div className={`${size} rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 border-2 border-white`} style={{ backgroundColor: color }}>
+  <div className={`${size} rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-white shadow-sm`} style={{ backgroundColor: color }}>
     {initials}
   </div>
 );
 
 // ── Tag ───────────────────────────────────────────────────────────────
 const Tag = ({ label, onRemove }) => (
-  <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 text-xs font-medium px-2.5 py-1 rounded-full border border-orange-100">
+  <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 text-xs font-medium px-2.5 py-1 rounded-full ring-1 ring-orange-100">
     {label}
     <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-orange-300 hover:text-red-500 transition-colors ml-0.5 cursor-pointer">
       <X size={10} />
@@ -80,7 +93,22 @@ const Tag = ({ label, onRemove }) => (
   </span>
 );
 
-// ── SearchableSelect — single-select with search ──────────────────────
+// ── Locked Tag (for completed assignees) ─────────────────────────────
+const LockedTag = ({ label }) => (
+  <span
+    title="This employee has already completed this task and cannot be removed"
+    className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-medium px-2.5 py-1 rounded-full ring-1 ring-emerald-200 cursor-not-allowed select-none"
+  >
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+    {label}
+    <span className="text-[9px] bg-emerald-500 text-white rounded-full px-1.5 py-px font-bold">✓</span>
+  </span>
+);
+
+// ── SearchableSelect ─────────────────────────────────────────────────
 const SearchableSelect = ({ options, value, onChange, placeholder, error = false, disabled = false }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -97,9 +125,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, error = false
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
-  }, [open]);
+  useEffect(() => { if (open && inputRef.current) inputRef.current.focus(); }, [open]);
 
   const filtered = options.filter(o => o.name.toLowerCase().includes(query.toLowerCase()));
   const selected = options.find(o => o.id === value);
@@ -108,8 +134,8 @@ const SearchableSelect = ({ options, value, onChange, placeholder, error = false
     <div className="relative" ref={containerRef}>
       <div
         onClick={() => !disabled && setOpen(!open)}
-        className={`flex items-center justify-between gap-2 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors select-none
-          ${error ? "border-red-400 bg-red-50" : open ? "border-orange-400 ring-2 ring-orange-100" : "border-gray-200 hover:border-gray-300"}
+        className={`flex items-center justify-between gap-2 px-3.5 py-2.5 border rounded-2xl cursor-pointer transition-all select-none
+          ${error ? "border-red-300 bg-red-50/50" : open ? "border-orange-400 ring-4 ring-orange-50" : "border-gray-200 hover:border-gray-300"}
           ${disabled ? "opacity-50 cursor-not-allowed bg-gray-50" : "bg-white"}`}
       >
         <span className={`text-sm truncate ${selected ? "text-gray-800 font-medium" : "text-gray-400"}`}>
@@ -127,7 +153,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, error = false
       </div>
 
       {open && !disabled && (
-        <div className="absolute z-30 mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-30 mt-1.5 w-full bg-white border border-gray-100 rounded-2xl shadow-xl shadow-gray-200/60 overflow-hidden">
           <div className="p-2 border-b border-gray-100">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -137,7 +163,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, error = false
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search..."
-                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 text-black"
+                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-orange-400 text-black"
               />
             </div>
           </div>
@@ -163,8 +189,8 @@ const SearchableSelect = ({ options, value, onChange, placeholder, error = false
   );
 };
 
-// ── UserMultiSelect ───────────────────────────────────────────────────
-const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading = false, error = false }) => {
+// ── UserMultiSelect (with locked completed assignees) ────────────────
+const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading = false, error = false, lockedIds = [] }) => {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef(null);
@@ -180,15 +206,14 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (open && searchInputRef.current) searchInputRef.current.focus();
-  }, [open]);
+  useEffect(() => { if (open && searchInputRef.current) searchInputRef.current.focus(); }, [open]);
 
   const filteredOptions = options.filter(opt =>
     opt.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const toggleUser = (userId) => {
+    if (lockedIds.includes(userId) && selected.includes(userId)) return;
     if (selected.includes(userId)) onChange(selected.filter(id => id !== userId));
     else onChange([...selected, userId]);
   };
@@ -196,8 +221,8 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
   return (
     <div className="relative" ref={containerRef}>
       <div
-        className={`flex flex-wrap gap-1.5 p-2.5 border rounded-xl bg-white min-h-[46px] items-center cursor-pointer transition-colors select-none
-          ${error ? "border-red-400 bg-red-50" : open ? "border-orange-400 ring-2 ring-orange-100" : "border-gray-200 hover:border-gray-300"}`}
+        className={`flex flex-wrap gap-1.5 p-2.5 border rounded-2xl bg-white min-h-[46px] items-center cursor-pointer transition-all select-none
+          ${error ? "border-red-300 bg-red-50/50" : open ? "border-orange-400 ring-4 ring-orange-50" : "border-gray-200 hover:border-gray-300"}`}
         onClick={() => !isLoading && setOpen(!open)}
       >
         {selected.length === 0 && (
@@ -207,7 +232,10 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
         )}
         {selected.map(id => {
           const label = options.find(opt => opt.id === id)?.name || id;
-          return <Tag key={id} label={label} onRemove={() => toggleUser(id)} />;
+          const isLocked = lockedIds.includes(id);
+          return isLocked
+            ? <LockedTag key={id} label={label} />
+            : <Tag key={id} label={label} onRemove={() => toggleUser(id)} />;
         })}
         <div className="ml-auto pl-1 shrink-0">
           {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
@@ -215,7 +243,7 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
       </div>
 
       {open && !isLoading && (
-        <div className="absolute z-30 mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-30 mt-1.5 w-full bg-white border border-gray-100 rounded-2xl shadow-xl shadow-gray-200/60 overflow-hidden">
           <div className="p-2 border-b border-gray-100 bg-gray-50/80">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -225,22 +253,29 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search members..."
-                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 text-black bg-white"
+                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-orange-400 text-black bg-white"
               />
             </div>
           </div>
           {options.length > 0 && (
             <div className="px-3 py-1.5 border-b border-gray-100 flex justify-between items-center">
               <button
-                onClick={(e) => { e.stopPropagation(); onChange(filteredOptions.map(o => o.id)); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newIds = filteredOptions
+                    .map(o => o.id)
+                    .filter(id => !lockedIds.includes(id) || selected.includes(id));
+                  const merged = Array.from(new Set([...selected.filter(id => lockedIds.includes(id)), ...newIds]));
+                  onChange(merged);
+                }}
                 className="text-xs text-orange-500 hover:text-orange-600 font-semibold cursor-pointer">
                 Select All {filteredOptions.length > 0 ? `(${filteredOptions.length})` : ""}
               </button>
-              {selected.length > 0 && (
+              {selected.some(id => !lockedIds.includes(id)) && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onChange([]); }}
+                  onClick={(e) => { e.stopPropagation(); onChange(selected.filter(id => lockedIds.includes(id))); }}
                   className="text-xs text-gray-400 hover:text-red-500 font-medium cursor-pointer">
-                  Clear all
+                  Clear unlocked
                 </button>
               )}
             </div>
@@ -250,29 +285,53 @@ const UserMultiSelect = ({ options, selected, onChange, placeholder, isLoading =
               ? <div className="p-4 text-center text-gray-400 text-xs">No matching members</div>
               : filteredOptions.map(opt => {
                 const isSelected = selected.includes(opt.id);
+                const isLocked = lockedIds.includes(opt.id);
                 return (
                   <label
                     key={opt.id}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors text-sm
-                      ${isSelected ? "bg-orange-50" : "hover:bg-gray-50"}`}
+                    className={`flex items-center gap-2.5 px-3 py-2 text-sm transition-colors
+                      ${isLocked ? "cursor-not-allowed bg-emerald-50/50" : "cursor-pointer"}
+                      ${isSelected && !isLocked ? "bg-orange-50" : ""}
+                      ${!isSelected ? "hover:bg-gray-50" : ""}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
+                      disabled={isLocked}
                       onChange={() => toggleUser(opt.id)}
-                      className="rounded border-gray-300 text-orange-500 focus:ring-orange-400 shrink-0 cursor-pointer"
+                      className={`rounded border-gray-300 text-orange-500 focus:ring-orange-400 shrink-0 ${
+                        isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                      }`}
                     />
                     <span className={isSelected ? "text-orange-700 font-medium" : "text-gray-700"}>{opt.name}</span>
-                    {isSelected && <CircleCheck size={12} className="ml-auto text-orange-400 shrink-0" />}
+                    {isLocked && (
+                      <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        Completed
+                      </span>
+                    )}
+                    {isSelected && !isLocked && <CircleCheck size={12} className="ml-auto text-orange-400 shrink-0" />}
                   </label>
                 );
               })
             }
           </div>
           {selected.length > 0 && (
-            <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/80 text-xs text-gray-500 font-medium">
-              {selected.length} member{selected.length > 1 ? "s" : ""} selected
+            <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/80 text-xs text-gray-500 font-medium flex items-center justify-between">
+              <span>{selected.length} member{selected.length > 1 ? "s" : ""} selected</span>
+              {lockedIds.filter(id => selected.includes(id)).length > 0 && (
+                <span className="text-emerald-600 text-[10px] font-semibold flex items-center gap-1">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  {lockedIds.filter(id => selected.includes(id)).length} locked
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -290,52 +349,418 @@ function SuccessModal({ message, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm cursor-pointer" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 z-10 p-8 flex flex-col items-center text-center">
-        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="16" fill="#22c55e" fillOpacity="0.15" />
-            <path d="M9 16.5l5 5 9-9" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm cursor-pointer" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl shadow-2xl shadow-gray-300/40 w-full max-w-sm mx-4 z-10 p-8 flex flex-col items-center text-center">
+        <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mb-4 ring-8 ring-emerald-50/50">
+          <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="16" fill="#10b981" fillOpacity="0.15" />
+            <path d="M9 16.5l5 5 9-9" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         <h3 className="text-base font-bold text-gray-900 mb-1">Success!</h3>
         <p className="text-sm text-gray-500 mb-5">{message}</p>
         <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-green-500 rounded-full" style={{ animation: "shrink 2.5s linear forwards" }} />
+          <div className="h-full bg-emerald-500 rounded-full" style={{ animation: "shrink 2.5s linear forwards" }} />
         </div>
         <style>{`@keyframes shrink { from { width: 100%; } to { width: 0%; } }`}</style>
-        <button onClick={onClose} className="mt-4 px-6 py-2 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer">Close</button>
+        <button onClick={onClose} className="mt-4 px-6 py-2 text-xs font-semibold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer">Close</button>
       </div>
     </div>
   );
 }
 
-// ── TASK DETAIL MODAL — fetches full details on open ──────────────────
-function TaskDetailModal({ taskId, onClose, onStatusChange }) {
+// ── CONFIRM DIALOG ────────────────────────────────────────────────────
+function ConfirmDialog({ title, message, confirmLabel = "Delete", danger = true, loading = false, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-sm mx-4 z-10 p-6">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${danger ? "bg-rose-50" : "bg-orange-50"}`}>
+          <TriangleAlert size={20} className={danger ? "text-rose-500" : "text-orange-500"} />
+        </div>
+        <h3 className="text-base font-bold text-gray-900 mb-1.5">{title}</h3>
+        <p className="text-sm text-gray-500 mb-6 leading-relaxed">{message}</p>
+        <div className="flex items-center gap-2">
+          <button onClick={onCancel} disabled={loading}
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer disabled:opacity-50
+              ${danger ? "bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200" : "bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-200"}`}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {loading ? "Deleting…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── EDIT TASK MODAL (locked completed assignees) ─────────────────────
+function EditTaskModal({ task, onClose, onSuccess }) {
+  const [title, setTitle] = useState(task?.title || "");
+  const [description, setDescription] = useState(task?.description || "");
+  const [startDate, setStartDate] = useState(toDateInput(task?.start_date));
+  const [dueDate, setDueDate] = useState(toDateInput(task?.due_date));
+  const [priority, setPriority] = useState(task?.priority || "");
+  const [assignees, setAssignees] = useState((task?.assignees || []).map(a => a.id));
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [apiErrors, setApiErrors] = useState({});
+  const [inlineError, setInlineError] = useState(null);
+
+  const lockedIds = (task?.assignees || [])
+    .filter(a => a.pivot?.status === "completed")
+    .map(a => a.id);
+
+  const isFormValid = title.trim() !== "" && dueDate !== "" && priority !== "" && assignees.length > 0;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${BASE}/api/admin/employees`, { headers: authHeaders() });
+        const data = await res.json();
+        const d = data.data || data;
+        setEmployees((Array.isArray(d) ? d : []).map(emp => ({
+          id: emp.id,
+          name: emp.firstname ? `${emp.firstname} ${emp.lastname || ""}`.trim() : (emp.name || emp.username || emp.email),
+        })));
+      } catch (e) { console.error(e); } finally { setLoadingEmployees(false); }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setApiErrors({}); setInlineError(null);
+    if (!title.trim()) { setInlineError("Title is required."); return; }
+    if (!dueDate) { setInlineError("Due date is required."); return; }
+    if (!priority) { setInlineError("Priority is required."); return; }
+    if (!assignees.length) { setInlineError("Please select at least one assignee."); return; }
+
+    const finalAssignees = Array.from(new Set([...lockedIds, ...assignees]));
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || null,
+          start_date: startDate || null,
+          due_date: dueDate,
+          priority: priority.toLowerCase(),
+          assignees: finalAssignees.map(Number),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 422 && data.errors) {
+          setApiErrors(data.errors);
+          setInlineError(Object.values(data.errors).flat().join(" • "));
+        } else throw new Error(data.message || "Failed to update task");
+        return;
+      }
+      onSuccess?.(data.data || data, "Task updated successfully!");
+      onClose();
+    } catch (err) { setInlineError(err.message); }
+    finally { setSubmitting(false); }
+  };
+
+  const inputCls = "w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-2xl outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 text-gray-800 transition-all bg-white placeholder:text-gray-400";
+  const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5";
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gray-900/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-lg z-10 flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0 bg-gradient-to-br from-orange-50/60 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200 shrink-0">
+              <PencilLine size={17} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Edit Task</h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">#{task?.id} · Update the task details</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition shrink-0 cursor-pointer ring-1 ring-gray-100">
+            <X size={15} />
+          </button>
+        </div>
+
+        {inlineError && (
+          <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-600 shrink-0">
+            <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{inlineError}</span>
+          </div>
+        )}
+
+        {lockedIds.length > 0 && (
+          <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-xs text-emerald-700 shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span>
+              <strong>{lockedIds.length}</strong> employee{lockedIds.length > 1 ? "s have" : " has"} already completed this task. They cannot be removed.
+            </span>
+          </div>
+        )}
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+          <div>
+            <label className={labelCls}><FileText size={11} className="text-gray-400" /> Title <span className="text-red-500">*</span></label>
+            <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="Enter task title" />
+            {apiErrors.title && <p className="text-red-500 text-xs mt-1">{apiErrors.title[0]}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}><CalendarDays size={11} className="text-gray-400" /> Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+            </div>
+            <div>
+              <label className={labelCls}><CalendarClock size={11} className="text-gray-400" /> Due Date <span className="text-red-500">*</span></label>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={`${inputCls} cursor-pointer`} />
+              {apiErrors.due_date && <p className="text-red-500 text-xs mt-1">{apiErrors.due_date[0]}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}><TagIcon size={11} className="text-gray-400" /> Priority <span className="text-red-500">*</span></label>
+            <div className="grid grid-cols-4 gap-2">
+              {["low","medium","high","urgent"].map(p => (
+                <button key={p} type="button" onClick={() => setPriority(p)}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer
+                    ${priority === p ? "border-transparent text-white shadow-md" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                  style={priority === p ? { backgroundColor: { low:"#10b981", medium:"#f59e0b", high:"#f43f5e", urgent:"#8b5cf6" }[p] } : {}}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${priority === p ? "bg-white" : priorityDot[p]}`} />
+                  {p}
+                </button>
+              ))}
+            </div>
+            {apiErrors.priority && <p className="text-red-500 text-xs mt-1">{apiErrors.priority[0]}</p>}
+          </div>
+
+          <div>
+            <label className={labelCls}>
+              <Users size={11} className="text-gray-400" /> Assignees <span className="text-red-500">*</span>
+              {lockedIds.length > 0 && (
+                <span className="text-[10px] text-emerald-600 font-normal ml-auto">
+                  {lockedIds.length} locked
+                </span>
+              )}
+            </label>
+            <UserMultiSelect
+              options={employees}
+              selected={assignees}
+              onChange={setAssignees}
+              placeholder="Select assignees"
+              isLoading={loadingEmployees}
+              error={apiErrors.assignees}
+              lockedIds={lockedIds}
+            />
+            {apiErrors.assignees && <p className="text-red-500 text-xs mt-1">{apiErrors.assignees[0]}</p>}
+          </div>
+
+          <div>
+            <label className={labelCls}><MessageSquare size={11} className="text-gray-400" /> Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
+              className={`${inputCls} resize-none`} placeholder="Task description..." />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+          <button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition cursor-pointer">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={submitting || !isFormValid}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-orange-200">
+            {submitting ? <><Loader2 size={14} className="animate-spin" />Saving…</> : <><CheckCheck size={14} />Save Changes</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ⭐═══════════════════════════════════════════════════════════════════════════
+// ACTIVITY TIMELINE — shows all status change history
+// ⭐═══════════════════════════════════════════════════════════════════════════
+function ActivityTimeline({ logs, loading }) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-3 py-6">
+        <Loader2 size={16} className="animate-spin text-orange-400" />
+        <span className="text-xs text-gray-400">Loading activity…</span>
+      </div>
+    );
+  }
+
+  if (!logs || logs.length === 0) {
+    return (
+      <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+        <History size={22} className="mx-auto mb-2 text-gray-300" />
+        <p className="text-xs text-gray-400 font-medium">No activity yet</p>
+      </div>
+    );
+  }
+
+  // Status color config for timeline badges
+  const STATUS_TIMELINE_CFG = {
+    pending:     { dot: "#f59e0b", bg: "#fef9c3", text: "#854d0e", label: "Pending"     },
+    in_progress: { dot: "#3b82f6", bg: "#dbeafe", text: "#1e40af", label: "In Progress" },
+    completed:   { dot: "#22c55e", bg: "#dcfce7", text: "#166534", label: "Completed"   },
+    overdue:     { dot: "#ef4444", bg: "#fee2e2", text: "#991b1b", label: "Overdue"     },
+  };
+
+  const getCfg = (s) => STATUS_TIMELINE_CFG[(s || "").toLowerCase().replace(/\s+/g, "_")] || STATUS_TIMELINE_CFG.pending;
+
+  const Badge = ({ status }) => {
+    const c = getCfg(status);
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold"
+        style={{ background: c.bg, color: c.text }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
+        {c.label}
+      </span>
+    );
+  };
+
+  return (
+    <div className="relative pl-6">
+      {/* Vertical line */}
+      <div className="absolute left-2 top-2.5 bottom-2.5 w-px bg-gray-200" />
+
+      {logs.map((log, idx) => {
+        const toCfg = getCfg(log.to_status);
+        const date = log.changed_at ? new Date(log.changed_at) : null;
+        const empName = log.employee?.name || "Unknown";
+        const empInitials = empName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
+        return (
+          <div key={log.id} className={`relative ${idx === logs.length - 1 ? "" : "pb-4"}`}>
+            {/* Timeline dot */}
+            <div
+              className="absolute -left-[22px] top-1.5 w-4 h-4 rounded-full border-[3px] border-white"
+              style={{
+                background: toCfg.dot,
+                boxShadow: `0 0 0 1.5px ${toCfg.dot}44`,
+              }}
+            />
+
+            {/* Content card */}
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              {/* Transition row */}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                {log.from_status ? (
+                  <>
+                    <Badge status={log.from_status} />
+                    <ArrowRight size={11} className="text-gray-400" />
+                    <Badge status={log.to_status} />
+                  </>
+                ) : (
+                  <span className="text-[11px] font-bold" style={{ color: toCfg.text }}>
+                    Assigned as <strong>{toCfg.label}</strong>
+                  </span>
+                )}
+              </div>
+
+              {/* Notes */}
+              {log.notes && (
+                <div className="text-xs text-gray-700 leading-relaxed bg-white px-3 py-2 rounded-lg border border-gray-200 mb-2 whitespace-pre-wrap">
+                  <div className="flex items-start gap-1.5">
+                    <MessageSquare size={11} className="text-gray-400 mt-0.5 shrink-0" />
+                    <span>{log.notes}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Meta */}
+              <div className="flex items-center gap-3 text-[10px] text-gray-400 font-medium flex-wrap">
+                {log.employee && (
+                  <span className="flex items-center gap-1.5">
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[7px] font-bold ring-1 ring-white shrink-0"
+                      style={{ background: getColor(log.employee.id || 0) }}
+                    >
+                      {empInitials}
+                    </div>
+                    <span className="font-semibold text-gray-500">{empName}</span>
+                    {log.employee.employee_id && (
+                      <span className="font-mono text-gray-400">{log.employee.employee_id}</span>
+                    )}
+                  </span>
+                )}
+                {date && (
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={10} className="text-gray-400" />
+                    {date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ·{" "}
+                    {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── TASK DETAIL MODAL (with Activity Timeline) ──────────────────────
+function TaskDetailModal({ taskId, onClose, onStatusChange, onDeleted }) {
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
-  useEffect(() => {
+  // ⭐ Activity logs state
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const fetchDetail = useCallback(async () => {
     if (!taskId) return;
-    let cancelled = false;
-    const fetchDetail = async () => {
-      setLoading(true); setError(null);
-      try {
-        const res = await fetch(`${BASE}/api/admin/tasks/${taskId}`, { headers: authHeaders() });
-        if (!res.ok) throw new Error(`Failed to load task (${res.status})`);
-        const data = await res.json();
-        if (!cancelled) setTask(data.data || data);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchDetail();
-    return () => { cancelled = true; };
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${taskId}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`Failed to load task (${res.status})`);
+      const data = await res.json();
+      setTask(data.data || data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [taskId]);
+
+  // ⭐ Fetch logs
+  const fetchLogs = useCallback(async () => {
+    if (!taskId) return;
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${taskId}/status-logs`, { headers: authHeaders() });
+      const json = await res.json();
+      if (json.success) setLogs(json.data || []);
+      else setLogs([]);
+    } catch (err) {
+      console.error("Failed to load logs:", err);
+      setLogs([]);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [taskId]);
+
+  useEffect(() => { fetchDetail(); }, [fetchDetail]);
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const toggleStatus = async () => {
     if (!task) return;
@@ -350,10 +775,31 @@ function TaskDetailModal({ taskId, onClose, onStatusChange }) {
       if (!res.ok) throw new Error("Failed to update status");
       setTask(prev => ({ ...prev, status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null }));
       onStatusChange?.();
+      fetchLogs(); // Refresh logs
     } catch (err) {
       alert(err.message);
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!task) return;
+    setDeleting(true); setDeleteError(null);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${task.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to delete task");
+      onDeleted?.(task.title);
+      onClose();
+    } catch (err) {
+      setDeleteError(err.message);
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -364,236 +810,396 @@ function TaskDetailModal({ taskId, onClose, onStatusChange }) {
   const assignees = task?.assignees || [];
   const isDone = ["completed","done"].includes((task?.status || "").toLowerCase());
 
+  const totalAssignees = assignees.length;
+  const completedAssignees = assignees.filter(a => a.pivot?.status === "completed").length;
+  const progressPct = totalAssignees > 0 ? Math.round((completedAssignees / totalAssignees) * 100) : 0;
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+    <>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-gray-900/45 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 flex flex-col max-h-[92vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-gray-100 shrink-0">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDone ? "bg-green-100" : "bg-orange-100"}`}>
-              {isDone ? <CheckCheck size={18} className="text-green-600" /> : <FileText size={18} className="text-orange-500" />}
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-gray-900 truncate">
-                {loading ? "Loading task…" : (task?.title || "Task")}
-              </h2>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {task?.id != null && (
-                  <span className="text-[10px] font-mono text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded">
-                    #{task.id}
-                  </span>
-                )}
-                {task?.priority && (
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${priorityClass}`}>
-                    {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                  </span>
-                )}
-                {task?.status && (
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusClass}`}>
-                    • {task.status}
-                  </span>
-                )}
-                {task?.currently_overdue && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 flex items-center gap-1">
-                    <AlertTriangle size={9} /> Overdue
-                  </span>
-                )}
+        <div className="relative bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-2xl z-10 flex flex-col max-h-[92vh] overflow-hidden">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3 px-6 py-5 border-b border-gray-100 shrink-0 bg-gradient-to-br from-orange-50/50 to-transparent">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isDone ? "bg-emerald-100" : "bg-orange-100"}`}>
+                {isDone ? <CheckCheck size={19} className="text-emerald-600" /> : <FileText size={19} className="text-orange-500" />}
               </div>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition shrink-0 cursor-pointer">
-            <X size={15} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 px-6 py-5">
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-              <Loader2 size={24} className="animate-spin text-orange-400" />
-              <span className="text-sm">Loading task details…</span>
-            </div>
-          )}
-
-          {!loading && error && (
-            <div className="flex items-start gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {!loading && !error && task && (
-            <div className="space-y-5">
-              {/* Description */}
-              {task.description && (
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Description</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-xl p-3 border border-gray-100">
-                    {task.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Dates grid */}
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Timeline</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <CalendarDays size={11} className="text-gray-400" />
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Start Date</p>
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800">{fmtDate(task.start_date)}</p>
-                  </div>
-                  <div className={`rounded-xl p-3 border ${task.currently_overdue ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-100"}`}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <CalendarClock size={11} className={task.currently_overdue ? "text-red-500" : "text-gray-400"} />
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${task.currently_overdue ? "text-red-500" : "text-gray-400"}`}>Due Date</p>
-                    </div>
-                    <p className={`text-sm font-semibold ${task.currently_overdue ? "text-red-700" : "text-gray-800"}`}>{fmtDate(task.due_date)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Project card */}
-              {project && (
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Project</p>
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50/40 rounded-xl p-3 border border-orange-100 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {(project.project_name || "P")[0]}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{project.project_name}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] font-mono text-orange-600 bg-white/70 border border-orange-100 px-1.5 py-0.5 rounded">
-                          {project.project_code}
-                        </span>
-                        {project.status && (
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[project.status] || "bg-gray-100 text-gray-600"}`}>
-                            • {project.status}
-                          </span>
-                        )}
-                        {project.priority && (
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${priorityColors[project.priority.toLowerCase()] || "bg-gray-100 text-gray-600"}`}>
-                            {project.priority}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Assignees */}
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                  Assignees {assignees.length > 0 && <span className="text-gray-300 normal-case font-medium">({assignees.length})</span>}
-                </p>
-                {assignees.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No assignees</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {assignees.map((a, i) => {
-                      const initials = ((a.firstname?.[0] || "") + (a.lastname?.[0] || "")).toUpperCase() || "?";
-                      const fullName = `${a.firstname || ""} ${a.lastname || ""}`.trim() || a.username || a.email || `Employee ${a.id}`;
-                      return (
-                        <div key={a.id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-0.5 pr-3 py-0.5 shadow-sm">
-                          {a.profile_image ? (
-                            <img src={a.profile_image} alt={fullName} className="w-7 h-7 rounded-full object-cover border-2 border-white" />
-                          ) : (
-                            <Avatar initials={initials} color={getColor(i)} />
-                          )}
-                          <div className="leading-tight">
-                            <p className="text-xs font-semibold text-gray-800">{fullName}</p>
-                            {a.employee_id && <p className="text-[9px] text-gray-400 font-mono">{a.employee_id}</p>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Creator + meta */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-                {creator && (
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created By</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                        {(creator.name || creator.username || "?")[0].toUpperCase()}
-                      </div>
-                      <div className="leading-tight min-w-0">
-                        <p className="text-xs font-semibold text-gray-800 truncate">{creator.name || creator.username}</p>
-                        {creator.email && <p className="text-[10px] text-gray-400 truncate">{creator.email}</p>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created On</p>
-                  <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                    <Clock size={11} className="text-gray-400" />
-                    {fmtDateTime(task.created_at)}
-                  </p>
-                  {task.updated_at && task.updated_at !== task.created_at && (
-                    <p className="text-[10px] text-gray-400 mt-1">Updated {fmtDateTime(task.updated_at)}</p>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-gray-900 truncate">
+                  {loading ? "Loading task…" : (task?.title || "Task")}
+                </h2>
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  {task?.id != null && (
+                    <span className="text-[10px] font-mono text-gray-400 bg-gray-50 ring-1 ring-gray-100 px-1.5 py-0.5 rounded-md">
+                      #{task.id}
+                    </span>
+                  )}
+                  {task?.priority && (
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize ${priorityClass}`}>
+                      {task.priority}
+                    </span>
+                  )}
+                  {task?.status && (
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusClass}`}>
+                      • {task.status}
+                    </span>
+                  )}
+                  {task?.currently_overdue && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 flex items-center gap-1">
+                      <AlertTriangle size={9} /> Overdue
+                    </span>
                   )}
                 </div>
               </div>
-
-              {task.completed_at && (
-                <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-2">
-                  <CheckCheck size={14} className="text-green-600 shrink-0" />
-                  <p className="text-xs text-green-700">
-                    <span className="font-semibold">Completed on</span> {fmtDateTime(task.completed_at)}
-                  </p>
-                </div>
-              )}
-
-              {task.attachment && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-2">
-                  <Paperclip size={13} className="text-blue-600 shrink-0" />
-                  <a href={task.attachment} target="_blank" rel="noreferrer" className="text-xs text-blue-700 font-semibold underline truncate">
-                    View attachment
-                  </a>
-                </div>
-              )}
             </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
-          <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition cursor-pointer">
-            Close
-          </button>
-          {task && (
-            <button
-              onClick={toggleStatus}
-              disabled={updating}
-              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-50 cursor-pointer
-                ${isDone ? "bg-gray-500 hover:bg-gray-600" : "bg-green-500 hover:bg-green-600"}`}
-            >
-              {updating ? (
-                <><Loader2 size={14} className="animate-spin" />Updating…</>
-              ) : isDone ? (
-                <><RotateCw size={14} />Mark as Pending</>
-              ) : (
-                <><CheckCheck size={14} />Mark as Completed</>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {task && !loading && (
+                <>
+                  <button onClick={() => setShowEdit(true)}
+                    title="Edit task"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-orange-50 text-gray-500 hover:text-orange-600 transition cursor-pointer ring-1 ring-gray-100">
+                    <PencilLine size={14} />
+                  </button>
+                  <button onClick={() => setShowDeleteConfirm(true)}
+                    title="Delete task"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-rose-50 text-gray-500 hover:text-rose-600 transition cursor-pointer ring-1 ring-gray-100">
+                    <Trash2 size={14} />
+                  </button>
+                </>
               )}
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition cursor-pointer ring-1 ring-gray-100">
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="overflow-y-auto flex-1 px-6 py-5">
+            {deleteError && (
+              <div className="flex items-start gap-2 p-3 mb-4 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-600">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" /><span>{deleteError}</span>
+              </div>
+            )}
+
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                <Loader2 size={24} className="animate-spin text-orange-400" />
+                <span className="text-sm">Loading task details…</span>
+              </div>
+            )}
+
+            {!loading && error && (
+              <div className="flex items-start gap-2 p-4 bg-rose-50 border border-rose-100 rounded-2xl text-sm text-rose-600">
+                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {!loading && !error && task && (
+              <div className="space-y-5">
+                {/* Description */}
+                {task.description && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Description</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-2xl p-4 ring-1 ring-gray-100">
+                      {task.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Timeline */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Timeline</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-2xl p-4 ring-1 ring-gray-100">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <CalendarDays size={11} className="text-gray-400" />
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Start Date</p>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800">{fmtDate(task.start_date)}</p>
+                    </div>
+                    <div className={`rounded-2xl p-4 ring-1 ${task.currently_overdue ? "bg-rose-50 ring-rose-100" : "bg-gray-50 ring-gray-100"}`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <CalendarClock size={11} className={task.currently_overdue ? "text-rose-500" : "text-gray-400"} />
+                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${task.currently_overdue ? "text-rose-500" : "text-gray-400"}`}>Due Date</p>
+                      </div>
+                      <p className={`text-sm font-semibold ${task.currently_overdue ? "text-rose-700" : "text-gray-800"}`}>{fmtDate(task.due_date)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Project */}
+                {project && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Project</p>
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50/40 rounded-2xl p-4 ring-1 ring-orange-100 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-md shadow-orange-200">
+                        {(project.project_name || "P")[0]}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{project.project_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] font-mono text-orange-600 bg-white/70 ring-1 ring-orange-100 px-1.5 py-0.5 rounded-md">
+                            {project.project_code}
+                          </span>
+                          {project.status && (
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[project.status] || "bg-gray-100 text-gray-600"}`}>
+                              • {project.status}
+                            </span>
+                          )}
+                          {project.priority && (
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize ${priorityColors[project.priority.toLowerCase()] || "bg-gray-100 text-gray-600"}`}>
+                              {project.priority}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Assignees with pivot status */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      Assignees {totalAssignees > 0 && <span className="text-gray-300 normal-case font-medium">({totalAssignees})</span>}
+                    </p>
+                    {completedAssignees > 0 && (
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full ring-1 ring-emerald-100">
+                        {completedAssignees} done
+                      </span>
+                    )}
+                  </div>
+
+                  {totalAssignees === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No assignees</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignees.map((a, i) => {
+                        const initials = ((a.firstname?.[0] || "") + (a.lastname?.[0] || "")).toUpperCase() || "?";
+                        const fullName = `${a.firstname || ""} ${a.lastname || ""}`.trim() || a.username || a.email || `Employee ${a.id}`;
+                        const pivotStatus = a.pivot?.status || "pending";
+                        const pivotCompleted = a.pivot?.completed_at;
+                        const isDone = pivotStatus === "completed";
+                        const isInProgress = pivotStatus === "in_progress";
+
+                        return (
+                          <div
+                            key={a.id}
+                            className={`flex items-center gap-3 rounded-2xl p-3 ring-1 transition-all ${
+                              isDone
+                                ? "bg-gradient-to-r from-emerald-50/70 to-white ring-emerald-100"
+                                : isInProgress
+                                ? "bg-gradient-to-r from-sky-50/70 to-white ring-sky-100"
+                                : "bg-white ring-gray-100"
+                            }`}
+                          >
+                            <div className="relative shrink-0">
+                              {a.profile_image ? (
+                                <img src={a.profile_image} alt={fullName} className={`w-10 h-10 rounded-full object-cover ring-2 ${isDone ? "ring-emerald-300" : isInProgress ? "ring-sky-300" : "ring-gray-200"}`} />
+                              ) : (
+                                <div
+                                  className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ring-2 shadow-sm ${isDone ? "ring-emerald-300" : isInProgress ? "ring-sky-300" : "ring-white"}`}
+                                  style={{ backgroundColor: getColor(i) }}
+                                >
+                                  {initials}
+                                </div>
+                              )}
+                              {isDone && (
+                                <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full ring-2 ring-white flex items-center justify-center">
+                                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                                    <path d="M1.5 5L4 7.5L8.5 3" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                                  </svg>
+                                </span>
+                              )}
+                              {isInProgress && !isDone && (
+                                <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-sky-500 rounded-full ring-2 ring-white flex items-center justify-center">
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{fullName}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {a.employee_id && (
+                                  <span className="text-[10px] font-mono text-gray-400">{a.employee_id}</span>
+                                )}
+                                {pivotCompleted && (
+                                  <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                                    <Clock size={9} />
+                                    {fmtDateTime(pivotCompleted)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className={`shrink-0 flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ring-1 capitalize ${
+                              isDone
+                                ? "bg-emerald-100 text-emerald-700 ring-emerald-200"
+                                : isInProgress
+                                ? "bg-sky-100 text-sky-700 ring-sky-200"
+                                : "bg-gray-100 text-gray-600 ring-gray-200"
+                            }`}>
+                              {isDone && <CheckCheck size={11} />}
+                              {isInProgress && <Loader2 size={11} className="animate-spin" />}
+                              {pivotStatus.replace("_", " ")}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Team progress */}
+                      <div className={`rounded-2xl p-4 ring-1 transition-colors ${
+                        progressPct === 100
+                          ? "bg-gradient-to-br from-emerald-50 to-emerald-50/30 ring-emerald-200"
+                          : "bg-gradient-to-br from-sky-50 to-white ring-sky-100"
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest flex items-center gap-1.5">
+                            <Users size={11} />
+                            Team Progress
+                          </span>
+                          <span className={`text-sm font-bold tabular-nums ${progressPct === 100 ? "text-emerald-600" : "text-sky-600"}`}>
+                            {completedAssignees}/{totalAssignees}
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-white overflow-hidden ring-1 ring-gray-100 relative">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              progressPct === 100
+                                ? "bg-gradient-to-r from-emerald-400 to-emerald-600"
+                                : "bg-gradient-to-r from-sky-400 to-sky-600"
+                            }`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                        <p className={`text-[10px] mt-1.5 font-semibold ${progressPct === 100 ? "text-emerald-600" : "text-sky-600"}`}>
+                          {progressPct === 100 ? "🎉 All assignees completed!" : `${progressPct}% complete`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ⭐⭐⭐ ACTIVITY TIMELINE — NEW SECTION ⭐⭐⭐ */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <History size={11} className="text-gray-400" />
+                      Activity Timeline
+                      {logs.length > 0 && (
+                        <span className="text-[9px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                          {logs.length}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <ActivityTimeline logs={logs} loading={logsLoading} />
+                </div>
+
+                {/* Creator + meta */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+                  {creator && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created By</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                          {(creator.name || creator.username || "?")[0].toUpperCase()}
+                        </div>
+                        <div className="leading-tight min-w-0">
+                          <p className="text-xs font-semibold text-gray-800 truncate">{creator.name || creator.username}</p>
+                          {creator.email && <p className="text-[10px] text-gray-400 truncate">{creator.email}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Created On</p>
+                    <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                      <Clock size={11} className="text-gray-400" />
+                      {fmtDateTime(task.created_at)}
+                    </p>
+                    {task.updated_at && task.updated_at !== task.created_at && (
+                      <p className="text-[10px] text-gray-400 mt-1">Updated {fmtDateTime(task.updated_at)}</p>
+                    )}
+                  </div>
+                </div>
+
+                {task.completed_at && (
+                  <div className="bg-emerald-50 ring-1 ring-emerald-100 rounded-2xl p-3.5 flex items-center gap-2">
+                    <CheckCheck size={14} className="text-emerald-600 shrink-0" />
+                    <p className="text-xs text-emerald-700">
+                      <span className="font-semibold">Completed on</span> {fmtDateTime(task.completed_at)}
+                    </p>
+                  </div>
+                )}
+
+                {task.attachment && (
+                  <div className="bg-sky-50 ring-1 ring-sky-100 rounded-2xl p-3.5 flex items-center gap-2">
+                    <Paperclip size={13} className="text-sky-600 shrink-0" />
+                    <a href={task.attachment} target="_blank" rel="noreferrer" className="text-xs text-sky-700 font-semibold underline truncate">
+                      View attachment
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+            <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition cursor-pointer">
+              Close
             </button>
-          )}
+            {task && (
+              <button
+                onClick={toggleStatus}
+                disabled={updating}
+                className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer shadow-lg
+                  ${isDone ? "bg-gray-500 hover:bg-gray-600 shadow-gray-200" : "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200"}`}
+              >
+                {updating ? (
+                  <><Loader2 size={14} className="animate-spin" />Updating…</>
+                ) : isDone ? (
+                  <><RotateCw size={14} />Mark as Pending</>
+                ) : (
+                  <><CheckCheck size={14} />Mark as Completed</>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {showEdit && task && (
+        <EditTaskModal
+          task={task}
+          onClose={() => setShowEdit(false)}
+          onSuccess={(updatedTask) => {
+            setTask(prev => ({ ...prev, ...updatedTask }));
+            onStatusChange?.();
+          }}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete this task?"
+          message={`"${task?.title}" will be permanently removed. This action cannot be undone.`}
+          confirmLabel="Delete Task"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+    </>
   );
 }
 
-// ── CLIENT MODAL (For adding client inline) ─────────────────────────────────
+// ── CLIENT MODAL ─────────────────────────────────────────────────────
 function ClientModal({ client, onClose, onSuccess }) {
   const isEdit = !!client;
   const [tab, setTab] = useState("basic");
@@ -602,7 +1208,6 @@ function ClientModal({ client, onClose, onSuccess }) {
   const [codeChecking, setCodeChecking] = useState(false);
   const [codeError, setCodeError] = useState(null);
   const [generatingCode, setGeneratingCode] = useState(false);
-  const debounceTimer = useRef(null);
 
   const [form, setForm] = useState(isEdit ? {
     client_code: client.client_code || "",
@@ -710,7 +1315,7 @@ function ClientModal({ client, onClose, onSuccess }) {
   ];
 
   const currentTabIdx = TABS.findIndex(t => t.key === tab);
-  const inputCls = "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition text-gray-800 bg-white placeholder:text-gray-400";
+  const inputCls = "w-full text-sm border border-gray-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition text-gray-800 bg-white placeholder:text-gray-400";
   const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5";
 
   const renderTabContent = () => {
@@ -753,7 +1358,7 @@ function ClientModal({ client, onClose, onSuccess }) {
               <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="+91 00000 00000" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Alternative Phone(optional)</label>
+              <label className={labelCls}>Alternative Phone (optional)</label>
               <input type="tel" value={form.alternative_phone} onChange={e => set("alternative_phone", e.target.value)} placeholder="+91 00000 00000" className={inputCls} />
             </div>
           </div>
@@ -784,19 +1389,19 @@ function ClientModal({ client, onClose, onSuccess }) {
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Tax & Business Details</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>GST Number(optional)</label>
+              <label className={labelCls}>GST Number (optional)</label>
               <input value={form.gst_number} onChange={e => set("gst_number", e.target.value.toUpperCase())}
                 placeholder="22AAAAA0000A1Z5" maxLength={15} className={inputCls} />
               <p className="text-[10px] text-gray-400 mt-1">15-character GSTIN</p>
             </div>
             <div>
-              <label className={labelCls}>PAN Number(optional)</label>
+              <label className={labelCls}>PAN Number (optional)</label>
               <input value={form.pan_number} onChange={e => set("pan_number", e.target.value.toUpperCase())}
                 placeholder="AAAAA0000A" maxLength={10} className={inputCls} />
               <p className="text-[10px] text-gray-400 mt-1">10-character PAN</p>
             </div>
           </div>
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+          <div className="bg-amber-50 ring-1 ring-amber-100 rounded-2xl p-4">
             <p className="text-[11px] font-semibold text-amber-700 mb-1">Important</p>
             <p className="text-[11px] text-amber-600">GST and PAN numbers are used for invoicing and compliance. Ensure they match your client's official documents.</p>
           </div>
@@ -810,7 +1415,7 @@ function ClientModal({ client, onClose, onSuccess }) {
             <div>
               <label className={labelCls}>Payment Terms</label>
               <div className="relative">
-                <select value={form.payment_terms} onChange={e => set("payment_terms", e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 appearance-none bg-white transition text-gray-700">
+                <select value={form.payment_terms} onChange={e => set("payment_terms", e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 appearance-none bg-white transition text-gray-700 cursor-pointer">
                   <option value="immediate">Immediate</option>
                   <option value="net_15">Net 15</option>
                   <option value="net_30">Net 30</option>
@@ -827,9 +1432,9 @@ function ClientModal({ client, onClose, onSuccess }) {
               <p className="text-[10px] text-gray-400 mt-1">Leave blank for no limit</p>
             </div>
           </div>
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-            <p className="text-[11px] font-semibold text-blue-700 mb-2">Payment Terms Reference</p>
-            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-[10px] text-blue-600">
+          <div className="bg-sky-50 rounded-2xl p-4 ring-1 ring-sky-100">
+            <p className="text-[11px] font-semibold text-sky-700 mb-2">Payment Terms Reference</p>
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-[10px] text-sky-600">
               {[
                 ["Immediate", "Due on receipt"],
                 ["Net 15", "Due in 15 days"],
@@ -838,7 +1443,7 @@ function ClientModal({ client, onClose, onSuccess }) {
                 ["Net 60", "Due in 60 days"],
               ].map(([t, d]) => (
                 <div key={t} className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
                   <span><span className="font-semibold">{t}:</span> {d}</span>
                 </div>
               ))}
@@ -858,12 +1463,12 @@ function ClientModal({ client, onClose, onSuccess }) {
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border cursor-pointer transition text-sm font-medium select-none
                     ${form.status === s
                       ? s === "active"
-                        ? "border-green-400 bg-green-50 text-green-700"
-                        : "border-red-300 bg-red-50 text-red-600"
+                        ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                        : "border-rose-300 bg-rose-50 text-rose-600"
                       : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
                   <input type="radio" name="status" value={s} checked={form.status === s}
                     onChange={() => set("status", s)} className="sr-only" />
-                  <span className={`w-2 h-2 rounded-full ${form.status === s ? (s === "active" ? "bg-green-500" : "bg-red-400") : "bg-gray-300"}`} />
+                  <span className={`w-2 h-2 rounded-full ${form.status === s ? (s === "active" ? "bg-emerald-500" : "bg-rose-400") : "bg-gray-300"}`} />
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </label>
               ))}
@@ -883,9 +1488,9 @@ function ClientModal({ client, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 z-10 flex flex-col max-h-[92vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+      <div className="absolute inset-0 bg-gray-900/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-2xl mx-4 z-10 flex flex-col max-h-[92vh]">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0 bg-gradient-to-br from-orange-50/60 to-transparent">
           <div>
             <h2 className="text-base font-bold text-gray-900">
               {isEdit ? `Edit Client` : "Add New Client"}
@@ -894,7 +1499,7 @@ function ClientModal({ client, onClose, onSuccess }) {
               {isEdit ? "Update client information below" : "Fill in the details to create a new client"}
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition ring-1 ring-gray-100 cursor-pointer">
             <X size={15} />
           </button>
         </div>
@@ -902,7 +1507,7 @@ function ClientModal({ client, onClose, onSuccess }) {
         <div className="flex border-b border-gray-100 shrink-0 px-2 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors
+              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer
                 ${tab === key ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
               <Icon size={12} />{label}
             </button>
@@ -911,7 +1516,7 @@ function ClientModal({ client, onClose, onSuccess }) {
 
         <div className="overflow-y-auto px-6 py-5 flex-1">
           {saveError && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 mb-4">
+            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-600 mb-4">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" /><span>{saveError}</span>
             </div>
           )}
@@ -922,24 +1527,24 @@ function ClientModal({ client, onClose, onSuccess }) {
           <div className="flex items-center gap-1.5">
             {TABS.map(({ key }) => (
               <button key={key} onClick={() => setTab(key)}
-                className={`h-2 rounded-full transition-all ${tab === key ? "bg-orange-500 w-4" : "bg-gray-200 hover:bg-gray-300 w-2"}`} />
+                className={`h-2 rounded-full transition-all cursor-pointer ${tab === key ? "bg-orange-500 w-4" : "bg-gray-200 hover:bg-gray-300 w-2"}`} />
             ))}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setTab(TABS[currentTabIdx - 1].key)} disabled={currentTabIdx === 0}
-              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition">
+              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition cursor-pointer">
               ← Prev
             </button>
             <button onClick={() => setTab(TABS[currentTabIdx + 1].key)} disabled={currentTabIdx === TABS.length - 1}
-              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition">
+              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition cursor-pointer">
               Next →
             </button>
             <div className="w-px h-5 bg-gray-200 mx-1" />
-            <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">
+            <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition cursor-pointer">
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving || !isValid() || codeChecking || generatingCode}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-orange-200">
               {saving
                 ? <><Loader2 size={14} className="animate-spin" />{isEdit ? "Updating…" : "Saving…"}</>
                 : isEdit
@@ -954,7 +1559,7 @@ function ClientModal({ client, onClose, onSuccess }) {
   );
 }
 
-// ── ADD PROJECT MODAL ─────────────────────────────────────────────────
+// ── ADD PROJECT MODAL ────────────────────────────────────────────────
 function AddProjectModal({ onClose, onSuccess }) {
   const [tab, setTab] = useState("basic");
   const [projectName, setProjectName] = useState("");
@@ -1146,18 +1751,18 @@ function AddProjectModal({ onClose, onSuccess }) {
     finally { setSubmitting(false); }
   };
 
-  const inputCls = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 text-black transition-all bg-white cursor-text";
+  const inputCls = "w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-2xl outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 text-black transition-all bg-white cursor-text";
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }}>
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/45 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }}>
+          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0 bg-gradient-to-br from-orange-50/60 to-transparent">
             <div>
               <h2 className="text-base font-bold text-gray-800">Add Project</h2>
               <p className="text-xs text-gray-400 mt-0.5">Fill in the details to create a new project</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 cursor-pointer transition-colors">
+            <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-100 bg-white ring-1 ring-gray-100 flex items-center justify-center text-gray-500 cursor-pointer transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -1178,13 +1783,13 @@ function AddProjectModal({ onClose, onSuccess }) {
           </div>
 
           {inlineError && (
-            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 shrink-0">
+            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-600 shrink-0">
               <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{inlineError}</span>
             </div>
           )}
 
           {clientSuccessMsg && (
-            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-600 shrink-0">
+            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-xs text-emerald-600 shrink-0">
               <CircleCheck size={13} className="shrink-0 mt-0.5" /><span>{clientSuccessMsg}</span>
             </div>
           )}
@@ -1212,13 +1817,13 @@ function AddProjectModal({ onClose, onSuccess }) {
                       <RotateCw size={13} /> New
                     </button>
                     <button onClick={checkProjectCode} disabled={codeChecking || !projectCode}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 text-orange-600 border border-orange-200 rounded-xl text-sm hover:bg-orange-100 disabled:opacity-50 font-medium cursor-pointer transition-colors">
+                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 text-orange-600 ring-1 ring-orange-200 rounded-xl text-sm hover:bg-orange-100 disabled:opacity-50 font-medium cursor-pointer transition-colors">
                       {codeChecking ? <Loader2 size={14} className="animate-spin" /> : <CircleCheck size={13} />}
                       Check
                     </button>
                   </div>
                   {codeCheckStatus && (
-                    <div className={`mt-1.5 text-xs flex items-center gap-1 ${codeCheckStatus.type === "success" ? "text-green-600" : "text-red-500"}`}>
+                    <div className={`mt-1.5 text-xs flex items-center gap-1 ${codeCheckStatus.type === "success" ? "text-emerald-600" : "text-rose-500"}`}>
                       {codeCheckStatus.type === "success" ? <CircleCheck size={12} /> : <CircleAlert size={12} />}
                       {codeCheckStatus.message}
                     </div>
@@ -1241,9 +1846,9 @@ function AddProjectModal({ onClose, onSuccess }) {
                   </label>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <select 
-                        value={selectedClientId} 
-                        onChange={e => setSelectedClientId(e.target.value)} 
+                      <select
+                        value={selectedClientId}
+                        onChange={e => setSelectedClientId(e.target.value)}
                         disabled={loadingClients}
                         className={`${inputCls} cursor-pointer`}
                       >
@@ -1258,7 +1863,7 @@ function AddProjectModal({ onClose, onSuccess }) {
                     <button
                       type="button"
                       onClick={() => setShowClientModal(true)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap cursor-pointer shadow-lg shadow-orange-200"
                     >
                       <UserPlus size={14} /> Add Client
                     </button>
@@ -1300,7 +1905,7 @@ function AddProjectModal({ onClose, onSuccess }) {
                     className={`${inputCls} resize-none`} placeholder="Add a brief description..." />
                 </div>
 
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center gap-3">
+                <div className="bg-orange-50 ring-1 ring-orange-100 rounded-2xl p-3.5 flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                     <Users size={15} className="text-orange-500" />
                   </div>
@@ -1319,7 +1924,7 @@ function AddProjectModal({ onClose, onSuccess }) {
             {tab === "members" && (
               <div className="space-y-5">
                 {membersError && (
-                  <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-xs flex items-center gap-2">
+                  <div className="bg-rose-50 ring-1 ring-rose-100 text-rose-600 p-3 rounded-2xl text-xs flex items-center gap-2">
                     <TriangleAlert size={13} />
                     <span className="flex-1">{membersError}</span>
                     <button onClick={fetchMembersData} className="underline font-medium cursor-pointer">Retry</button>
@@ -1333,10 +1938,10 @@ function AddProjectModal({ onClose, onSuccess }) {
                   </div>
                 ) : (
                   <>
-                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <div className="bg-white ring-1 ring-gray-100 rounded-2xl p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
-                        <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
-                          <UserRoundCog size={14} className="text-green-600" />
+                        <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <UserRoundCog size={14} className="text-emerald-600" />
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-700">Project Manager <span className="text-red-500">*</span></p>
@@ -1355,10 +1960,10 @@ function AddProjectModal({ onClose, onSuccess }) {
                       )}
                     </div>
 
-                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <div className="bg-white ring-1 ring-gray-100 rounded-2xl p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                          <Crown size={14} className="text-blue-600" />
+                        <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center">
+                          <Crown size={14} className="text-sky-600" />
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-700">Team Leader <span className="text-red-500">*</span></p>
@@ -1377,7 +1982,7 @@ function AddProjectModal({ onClose, onSuccess }) {
                       )}
                     </div>
 
-                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <div className="bg-white ring-1 ring-gray-100 rounded-2xl p-4 shadow-sm">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
@@ -1389,7 +1994,7 @@ function AddProjectModal({ onClose, onSuccess }) {
                           </div>
                         </div>
                         {teamMembers.length > 0 && (
-                          <span className="text-[11px] text-orange-500 font-semibold bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
+                          <span className="text-[11px] text-orange-500 font-semibold bg-orange-50 px-2.5 py-1 rounded-full ring-1 ring-orange-100">
                             {teamMembers.length} selected
                           </span>
                         )}
@@ -1403,18 +2008,18 @@ function AddProjectModal({ onClose, onSuccess }) {
                     </div>
 
                     {(projectManagerId || teamLeaderId || teamMembers.length > 0) && (
-                      <div className="bg-gradient-to-br from-gray-50 to-orange-50/30 border border-gray-200 rounded-xl p-3 space-y-2">
+                      <div className="bg-gradient-to-br from-gray-50 to-orange-50/30 ring-1 ring-gray-200 rounded-2xl p-4 space-y-2">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Team Summary</p>
                         {projectManagerId && (
                           <div className="flex items-center gap-2 text-xs">
-                            <UserRoundCog size={11} className="text-green-500 shrink-0" />
+                            <UserRoundCog size={11} className="text-emerald-500 shrink-0" />
                             <span className="text-gray-500 w-14 shrink-0">Manager</span>
                             <span className="font-semibold text-gray-700">{memberOptions.projectManagers.find(m => m.id === projectManagerId)?.name}</span>
                           </div>
                         )}
                         {teamLeaderId && (
                           <div className="flex items-center gap-2 text-xs">
-                            <Crown size={11} className="text-blue-500 shrink-0" />
+                            <Crown size={11} className="text-sky-500 shrink-0" />
                             <span className="text-gray-500 w-14 shrink-0">Leader</span>
                             <span className="font-semibold text-gray-700">{memberOptions.teamLeaders.find(m => m.id === teamLeaderId)?.name}</span>
                           </div>
@@ -1441,12 +2046,12 @@ function AddProjectModal({ onClose, onSuccess }) {
             <div className="flex items-center gap-2">
               {tab === "basic" && (
                 <button onClick={() => setTab("members")}
-                  className="flex items-center gap-1.5 px-5 py-2 border border-orange-200 text-orange-600 rounded-xl text-sm font-semibold hover:bg-orange-50 transition cursor-pointer">
+                  className="flex items-center gap-1.5 px-5 py-2 ring-1 ring-orange-200 text-orange-600 rounded-xl text-sm font-semibold hover:bg-orange-50 transition cursor-pointer">
                   Members <ArrowRight size={13} />
                 </button>
               )}
               <button onClick={handleSave} disabled={submitting || !isFormValid}
-                className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer">
+                className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer shadow-lg shadow-orange-200">
                 {submitting ? <><Loader2 size={14} className="animate-spin" />Creating...</> : <><CircleCheck size={14} /> Create Project</>}
               </button>
             </div>
@@ -1469,7 +2074,7 @@ function AddProjectModal({ onClose, onSuccess }) {
   );
 }
 
-// ── ADD TASK MODAL ─────────────────────────────────────────────────
+// ── ADD TASK MODAL ───────────────────────────────────────────────────
 function AddTaskModal({ onClose, onSuccess }) {
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -1484,6 +2089,7 @@ function AddTaskModal({ onClose, onSuccess }) {
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [apiErrors, setApiErrors] = useState({});
+  const [inlineError, setInlineError] = useState(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [projectSuccessMsg, setProjectSuccessMsg] = useState(null);
 
@@ -1494,9 +2100,7 @@ function AddTaskModal({ onClose, onSuccess }) {
     priority !== "" &&
     assignees.length > 0;
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  useEffect(() => { fetchProjects(); }, []);
 
   const fetchProjects = async () => {
     try {
@@ -1529,12 +2133,12 @@ function AddTaskModal({ onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setApiErrors({});
-    if (!title.trim()) { alert("Title is required"); return; }
-    if (!projectId)    { alert("Please select a project"); return; }
-    if (!dueDate)      { alert("Due date is required"); return; }
-    if (!priority)     { alert("Priority is required"); return; }
-    if (!assignees.length) { alert("Please select at least one assignee"); return; }
+    setApiErrors({}); setInlineError(null);
+    if (!title.trim()) { setInlineError("Title is required."); return; }
+    if (!projectId)    { setInlineError("Please select a project."); return; }
+    if (!dueDate)      { setInlineError("Due date is required."); return; }
+    if (!priority)     { setInlineError("Priority is required."); return; }
+    if (!assignees.length) { setInlineError("Please select at least one assignee."); return; }
     setSubmitting(true);
     try {
       const res = await fetch(`${BASE}/api/admin/tasks`, {
@@ -1554,62 +2158,80 @@ function AddTaskModal({ onClose, onSuccess }) {
       if (!res.ok) {
         if (res.status === 422 && data.errors) {
           setApiErrors(data.errors);
-          alert(`Validation failed:\n${Object.values(data.errors).flat().join("\n")}`);
+          setInlineError(Object.values(data.errors).flat().join(" • "));
         } else throw new Error(data.message || "Failed to create task");
         return;
       }
-      alert("Task created successfully");
       onSuccess?.();
       onClose();
-    } catch (err) { alert(err.message); } finally { setSubmitting(false); }
+    } catch (err) { setInlineError(err.message); } finally { setSubmitting(false); }
   };
+
+  const inputCls = "w-full px-3.5 py-2.5 border border-gray-200 rounded-2xl text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all bg-white placeholder:text-gray-400";
+  const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5";
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-          <div className="flex justify-between items-center p-4 border-b">
-            <h2 className="text-lg font-bold text-black">Add New Task</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X size={20} /></button>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/45 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100 bg-gradient-to-br from-orange-50/60 to-transparent shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200 shrink-0">
+                <Plus size={18} className="text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Add New Task</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">Fill in the details below</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition ring-1 ring-gray-100 cursor-pointer shrink-0">
+              <X size={15} />
+            </button>
           </div>
 
+          {inlineError && (
+            <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-600 shrink-0">
+              <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{inlineError}</span>
+            </div>
+          )}
+
           {projectSuccessMsg && (
-            <div className="mx-4 mt-2 flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-600 shrink-0">
+            <div className="mx-6 mt-2 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-xs text-emerald-600 shrink-0">
               <CircleCheck size={13} className="shrink-0 mt-0.5" /><span>{projectSuccessMsg}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="overflow-y-auto p-4 space-y-4">
+          <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+              <label className={labelCls}><FileText size={11} className="text-gray-400" /> Title <span className="text-red-500">*</span></label>
               <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-                className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black" placeholder="Enter task title" />
+                className={inputCls} placeholder="Enter task title" />
               {apiErrors.title && <p className="text-red-500 text-xs mt-1">{apiErrors.title[0]}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Start Date</label>
+                <label className={labelCls}><CalendarDays size={11} className="text-gray-400" /> Start Date</label>
                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black" />
+                  className={`${inputCls} cursor-pointer`} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Due Date <span className="text-red-500">*</span></label>
+                <label className={labelCls}><CalendarClock size={11} className="text-gray-400" /> Due Date <span className="text-red-500">*</span></label>
                 <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black" />
+                  className={`${inputCls} cursor-pointer`} />
                 {apiErrors.due_date && <p className="text-red-500 text-xs mt-1">{apiErrors.due_date[0]}</p>}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Project <span className="text-red-500">*</span></label>
+              <label className={labelCls}><Briefcase size={11} className="text-gray-400" /> Project <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <select 
-                    value={projectId} 
-                    onChange={e => setProjectId(e.target.value)} 
+                  <select
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
                     disabled={loadingProjects}
-                    className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black bg-white cursor-pointer"
+                    className={`${inputCls} bg-white cursor-pointer`}
                   >
                     <option value="">{loadingProjects ? "Loading..." : "Select a project"}</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.project_name} ({p.project_code})</option>)}
@@ -1618,7 +2240,7 @@ function AddTaskModal({ onClose, onSuccess }) {
                 <button
                   type="button"
                   onClick={() => setShowAddProjectModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-orange-500 text-white rounded-2xl text-sm font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap cursor-pointer shadow-lg shadow-orange-200"
                 >
                   <Plus size={14} /> Add Project
                 </button>
@@ -1627,36 +2249,40 @@ function AddTaskModal({ onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Team Members <span className="text-red-500">*</span></label>
+              <label className={labelCls}><Users size={11} className="text-gray-400" /> Team Members <span className="text-red-500">*</span></label>
               <UserMultiSelect options={employees} selected={assignees} onChange={setAssignees}
                 placeholder="Select team members" isLoading={loadingEmployees} />
               {apiErrors.assignees && <p className="text-red-500 text-xs mt-1">{apiErrors.assignees[0]}</p>}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Priority <span className="text-red-500">*</span></label>
-              <select value={priority} onChange={e => setPriority(e.target.value)}
-                className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black bg-white cursor-pointer">
-                <option value="">Select priority</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-                <option value="urgent">Urgent</option>
-              </select>
+              <label className={labelCls}><TagIcon size={11} className="text-gray-400" /> Priority <span className="text-red-500">*</span></label>
+              <div className="grid grid-cols-4 gap-2">
+                {["low","medium","high","urgent"].map(p => (
+                  <button key={p} type="button" onClick={() => setPriority(p)}
+                    className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer
+                      ${priority === p ? "border-transparent text-white shadow-md" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                    style={priority === p ? { backgroundColor: { low:"#10b981", medium:"#f59e0b", high:"#f43f5e", urgent:"#8b5cf6" }[p] } : {}}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${priority === p ? "bg-white" : priorityDot[p]}`} />
+                    {p}
+                  </button>
+                ))}
+              </div>
               {apiErrors.priority && <p className="text-red-500 text-xs mt-1">{apiErrors.priority[0]}</p>}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Description</label>
+              <label className={labelCls}><MessageSquare size={11} className="text-gray-400" /> Description</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
-                className="w-full p-2 border border-gray-200 rounded-lg text-sm text-black resize-none" placeholder="Task description..." />
+                className={`${inputCls} resize-none`} placeholder="Task description..." />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">Cancel</button>
+              <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">Cancel</button>
               <button type="submit" disabled={submitting || !isFormValid}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer">
-                {submitting ? "Creating..." : "Add New Task"}
+                className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer shadow-lg shadow-orange-200 flex items-center gap-2">
+                {submitting ? <><Loader2 size={14} className="animate-spin" />Creating…</> : <><Plus size={14} />Add New Task</>}
               </button>
             </div>
           </form>
@@ -1678,7 +2304,7 @@ function AddTaskModal({ onClose, onSuccess }) {
   );
 }
 
-// ── Completion Modal Component ─────────────────────────────────────────────────
+// ── Completion Modal ─────────────────────────────────────────────────
 function CompletionModal({ taskTitle, onClose }) {
   useEffect(() => {
     confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
@@ -1689,10 +2315,10 @@ function CompletionModal({ taskTitle, onClose }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 text-center animate-in zoom-in-95 duration-200">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
-          <CheckSquare size={32} className="text-green-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-7 text-center animate-in zoom-in-95 duration-200">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center ring-8 ring-emerald-50/60">
+          <CheckSquare size={30} className="text-emerald-500" />
         </div>
         <h3 className="text-xl font-bold text-gray-800 mb-2">Task Completed! 🎉</h3>
         <p className="text-sm text-gray-500 mb-6">
@@ -1700,7 +2326,7 @@ function CompletionModal({ taskTitle, onClose }) {
         </p>
         <button
           onClick={onClose}
-          className="px-6 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition shadow-md"
+          className="px-6 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition shadow-lg shadow-orange-200 cursor-pointer"
         >
           Continue
         </button>
@@ -1709,8 +2335,33 @@ function CompletionModal({ taskTitle, onClose }) {
   );
 }
 
-// ── Normalize task ─────────────────────────────────────────────────────────────
+// ── DELETION TOAST ───────────────────────────────────────────────────
+function DeletedToast({ taskTitle, onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className="fixed bottom-6 right-6 z-[90] flex items-center gap-3 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl shadow-gray-400/30 animate-in slide-in-from-bottom-4 duration-300">
+      <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
+        <Trash2 size={14} className="text-rose-400" />
+      </div>
+      <div className="text-sm">
+        <span className="font-semibold">"{taskTitle}"</span> was deleted
+      </div>
+      <button onClick={onClose} className="ml-2 text-gray-400 hover:text-white cursor-pointer"><X size={14} /></button>
+    </div>
+  );
+}
+
+// ── Normalize task ───────────────────────────────────────────────────
 function normalizeTask(t) {
+  const assignees = t.assignees || [];
+  const totalAssignees = assignees.length;
+  const completedAssignees = assignees.filter(
+    (a) => a.pivot?.status === "completed"
+  ).length;
+
   return {
     id: t.id,
     title: t.title || t.name || "Untitled",
@@ -1718,13 +2369,21 @@ function normalizeTask(t) {
       ? new Date(t.due_date).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" })
       : (t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "—"),
     tag: t.priority ? t.priority.charAt(0).toUpperCase() + t.priority.slice(1) : "General",
-    tagClass: priorityColors[t.priority?.toLowerCase()] || "bg-blue-50 text-blue-600",
+    tagClass: priorityColors[t.priority?.toLowerCase()] || "bg-sky-50 text-sky-600 ring-1 ring-sky-100",
     status: t.status || "Pending",
     done: ["completed","done"].includes((t.status || "").toLowerCase()),
+
+    assignees: assignees,
+    assigneeCount: totalAssignees,
+    completedCount: completedAssignees,
+    progress: totalAssignees > 0 ? Math.round((completedAssignees / totalAssignees) * 100) : 0,
+
+    isOverdue: t.is_overdue || false,
+    currentlyOverdue: t.currently_overdue || false,
   };
 }
 
-// ── Normalize project ─────────────────────────────────────────────────────────────
+// ── Normalize project ────────────────────────────────────────────────
 function normalizeProject(p, index, taskArray) {
   const allTasks  = taskArray || p.tasks || [];
   const completed = allTasks.filter(t => ["completed","done"].includes((t.status || "").toLowerCase())).length;
@@ -1745,25 +2404,22 @@ function normalizeProject(p, index, taskArray) {
   }
   let lead = "—";
   if (p.project_manager) {
-    if (typeof p.project_manager === "string") {
-      lead = p.project_manager;
-    } else {
+    if (typeof p.project_manager === "string") lead = p.project_manager;
+    else {
       lead = p.project_manager.firstname
         ? `${p.project_manager.firstname} ${p.project_manager.lastname || ""}`.trim()
         : (p.project_manager.name || p.project_manager.username || p.project_manager.email || "—");
     }
   } else if (p.team_leader) {
-    if (typeof p.team_leader === "string") {
-      lead = p.team_leader;
-    } else {
+    if (typeof p.team_leader === "string") lead = p.team_leader;
+    else {
       lead = p.team_leader.firstname
         ? `${p.team_leader.firstname} ${p.team_leader.lastname || ""}`.trim()
         : (p.team_leader.name || p.team_leader.username || p.team_leader.email || "—");
     }
   } else if (p.manager) {
-    if (typeof p.manager === "string") {
-      lead = p.manager;
-    } else {
+    if (typeof p.manager === "string") lead = p.manager;
+    else {
       lead = p.manager.firstname
         ? `${p.manager.firstname} ${p.manager.lastname || ""}`.trim()
         : (p.manager.name || p.manager.username || p.manager.email || "—");
@@ -1771,9 +2427,8 @@ function normalizeProject(p, index, taskArray) {
   } else if (p.lead) {
     lead = typeof p.lead === "string" ? p.lead : (p.lead.name || "—");
   } else if (p.creator) {
-    if (typeof p.creator === "string") {
-      lead = p.creator;
-    } else {
+    if (typeof p.creator === "string") lead = p.creator;
+    else {
       lead = p.creator.firstname
         ? `${p.creator.firstname} ${p.creator.lastname || ""}`.trim()
         : (p.creator.name || p.creator.username || p.creator.email || "—");
@@ -1793,7 +2448,7 @@ function normalizeProject(p, index, taskArray) {
   };
 }
 
-// ── Main TasksPage ─────────────────────────────────────────────────────────────
+// ── Main TasksPage ───────────────────────────────────────────────────
 export default function TasksPage() {
   const [projects, setProjects]         = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -1804,9 +2459,12 @@ export default function TasksPage() {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completingTaskTitle, setCompletingTaskTitle] = useState("");
   const [updatingTask, setUpdatingTask] = useState(false);
+  const [deletedToast, setDeletedToast] = useState(null);
 
-  // 👇 New state for task detail modal
   const [detailTaskId, setDetailTaskId] = useState(null);
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [rowDeleting, setRowDeleting] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -1879,16 +2537,45 @@ export default function TasksPage() {
     }
   };
 
+  const handleRowDelete = async () => {
+    if (!deleteTarget) return;
+    setRowDeleting(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/tasks/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to delete task");
+      setDeletedToast(deleteTarget.title);
+      setDeleteTarget(null);
+      await fetchTasks();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setRowDeleting(false);
+    }
+  };
+
   const filteredItems = (selected?.items || []).filter(
     t => t.tag.toLowerCase() === priority.toLowerCase()
   );
   const displayItems = filteredItems.length > 0 ? filteredItems : (selected?.items || []);
 
   return (
-    <div className="relative">
-      <div className="flex justify-end mb-4">
+    <div className="relative bg-gray-50/40 -m-1 p-1 rounded-3xl">
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-200">
+            <LayoutGrid size={16} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">Tasks</h1>
+            <p className="text-[11px] text-gray-400">Manage projects and track task progress</p>
+          </div>
+        </div>
         <button onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 shadow-sm">
+          className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-2xl text-sm font-semibold hover:bg-orange-600 shadow-lg shadow-orange-200 transition-all hover:-translate-y-0.5 cursor-pointer">
           <Plus size={16} /> Add Task
         </button>
       </div>
@@ -1902,8 +2589,11 @@ export default function TasksPage() {
 
       {!loading && error && (
         <div className="flex flex-col items-center justify-center h-64 gap-3">
-          <p className="text-sm text-red-500">Failed to load tasks: {error}</p>
-          <button onClick={fetchTasks} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center">
+            <AlertTriangle size={20} className="text-rose-500" />
+          </div>
+          <p className="text-sm text-rose-500">Failed to load tasks: {error}</p>
+          <button onClick={fetchTasks} className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-2xl text-sm font-semibold hover:bg-orange-600 shadow-lg shadow-orange-200 cursor-pointer">
             <RefreshCw size={14} /> Retry
           </button>
         </div>
@@ -1911,25 +2601,25 @@ export default function TasksPage() {
 
       {!loading && !error && (
         <div className="flex gap-5 h-[calc(100vh-220px)] overflow-hidden">
-          <div className="w-72 shrink-0 overflow-y-auto space-y-3">
+          <div className="w-72 shrink-0 overflow-y-auto space-y-3 pr-1">
             {projects.length === 0 && (
               <p className="text-sm text-gray-400 text-center mt-10">No projects found.</p>
             )}
             {projects.map(p => (
               <div key={p.id} onClick={() => setSelected(p)}
-                className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all shadow-sm hover:shadow-md
-                  ${selected?.id === p.id ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-100"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                className={`bg-white rounded-3xl border p-4 cursor-pointer transition-all shadow-sm hover:shadow-lg hover:shadow-gray-200/60 hover:-translate-y-0.5
+                  ${selected?.id === p.id ? "border-orange-300 ring-4 ring-orange-50" : "border-gray-100"}`}>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm"
                     style={{ backgroundColor: p.color }}>
                     {p.name[0]}
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-gray-800">{p.name}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-800 truncate">{p.name}</p>
                     <p className="text-[10px] text-gray-400">{p.tasks} tasks • {p.completed} Completed</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-500 mb-2">
+                <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-500 mb-3">
                   <div>
                     <p className="text-gray-400">Deadline</p>
                     <p className="font-semibold text-gray-700">{p.deadline}</p>
@@ -1947,38 +2637,38 @@ export default function TasksPage() {
                   <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${p.pct}%`, backgroundColor: p.color }} />
                   </div>
-                  <span className="text-[10px] font-semibold text-gray-500">{p.pct}% Completed</span>
+                  <span className="text-[10px] font-semibold text-gray-500">{p.pct}%</span>
                 </div>
               </div>
             ))}
           </div>
 
           {selected && (
-            <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-y-auto p-5">
+            <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-y-auto p-5">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
                   {["High","Medium","Low"].map(tab => (
                     <button key={tab} onClick={() => setPriority(tab)}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all
-                        ${priority === tab ? "bg-white shadow text-gray-800" : "text-gray-500"}`}>
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer
+                        ${priority === tab ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"}`}>
                       {tab}
                     </button>
                   ))}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-xl px-3 py-1.5 hover:bg-gray-50 transition cursor-pointer">
                     <Calendar size={11} /> Due Date
                   </button>
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-xl px-3 py-1.5 hover:bg-gray-50 transition cursor-pointer">
                     All Tags <ChevronDown size={11} />
                   </button>
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-xl px-3 py-1.5 hover:bg-gray-50 transition cursor-pointer">
                     Sort By : Created Date <ChevronDown size={11} />
                   </button>
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
+              <div className="bg-gradient-to-br from-gray-50 to-orange-50/30 rounded-2xl p-4 mb-4 ring-1 ring-gray-100">
                 <h3 className="text-sm font-bold text-gray-800 mb-3">{selected.name}</h3>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-gray-500">Tasks Done</span>
@@ -1987,7 +2677,7 @@ export default function TasksPage() {
                   {selected.completed} / {selected.tasks + selected.completed}
                 </p>
                 <div className="h-2 rounded-full bg-gray-200 overflow-hidden mb-1">
-                  <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${selected.pct}%` }} />
+                  <div className="h-full rounded-full bg-orange-500 transition-all" style={{ width: `${selected.pct}%` }} />
                 </div>
                 <p className="text-[11px] text-gray-400">{selected.pct}% Completed</p>
               </div>
@@ -1996,7 +2686,7 @@ export default function TasksPage() {
                 <span className="text-xs font-medium text-gray-400">
                   {displayItems.length} task{displayItems.length !== 1 ? "s" : ""}
                 </span>
-                <button className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5">
+                <button className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-xl px-3 py-1.5 hover:bg-gray-50 transition cursor-pointer">
                   Mark All as Completed <ChevronDown size={11} />
                 </button>
               </div>
@@ -2009,32 +2699,111 @@ export default function TasksPage() {
                     <div
                       key={task.id}
                       onClick={() => setDetailTaskId(task.id)}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all cursor-pointer group"
+                      className="flex flex-col gap-2 p-3.5 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all cursor-pointer group"
                     >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateTaskStatus(task.id, task.done ? "completed" : "pending", task.title);
-                        }}
-                        disabled={updatingTask}
-                        className="cursor-pointer text-gray-400 disabled:opacity-50"
-                      >
-                        {task.done ? <CheckSquare size={16} className="text-orange-500" /> : <Square size={16} />}
-                      </button>
-                      <Star size={14} className="text-gray-300 shrink-0" />
-                      <p className={`flex-1 text-sm font-medium ${task.done ? "line-through text-gray-400" : "text-gray-700"}`}>
-                        {task.title}
-                      </p>
-                      <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                        <Calendar size={11} /> {task.date}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateTaskStatus(task.id, task.done ? "completed" : "pending", task.title);
+                          }}
+                          disabled={updatingTask}
+                          className="cursor-pointer text-gray-400 disabled:opacity-50 shrink-0"
+                        >
+                          {task.done ? <CheckSquare size={17} className="text-orange-500" /> : <Square size={17} />}
+                        </button>
+                        <p className={`flex-1 text-sm font-medium truncate ${task.done ? "line-through text-gray-400" : "text-gray-700"}`}>
+                          {task.title}
+                        </p>
+                        <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-gray-400 shrink-0">
+                          <Calendar size={11} /> {task.date}
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize shrink-0 ${task.tagClass}`}>
+                          {task.tag}
+                        </span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${statusColors[task.status] || "bg-gray-100 text-gray-500"}`}>
+                          • {task.status}
+                        </span>
+                        {task.currentlyOverdue && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 shrink-0">
+                            Overdue
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
+                            title="View / Edit"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition cursor-pointer">
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
+                            title="Delete"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${task.tagClass}`}>
-                        {task.tag}
-                      </span>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[task.status] || "bg-gray-100 text-gray-500"}`}>
-                        • {task.status}
-                      </span>
-                      <Eye size={13} className="text-gray-300 group-hover:text-orange-500 transition-colors shrink-0" />
+
+                      {task.assigneeCount > 0 && (
+                        <div className="flex items-center gap-3 pl-8">
+                          <div className="flex items-center -space-x-2">
+                            {task.assignees.slice(0, 4).map((a, i) => {
+                              const initials = `${a.firstname?.[0] || ""}${a.lastname?.[0] || ""}`.toUpperCase() || "?";
+                              const isDone = a.pivot?.status === "completed";
+                              const isInProgress = a.pivot?.status === "in_progress";
+                              return (
+                                <div
+                                  key={a.id}
+                                  title={`${a.firstname || ""} ${a.lastname || ""} — ${a.pivot?.status || "pending"}${a.pivot?.completed_at ? ` (${fmtDateTime(a.pivot.completed_at)})` : ""}`}
+                                  className={`relative w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold ring-2 shadow-sm transition-transform hover:scale-110 hover:z-10 ${
+                                    isDone ? "ring-emerald-300" : isInProgress ? "ring-sky-300" : "ring-white"
+                                  }`}
+                                  style={{ backgroundColor: getColor(i) }}
+                                >
+                                  {initials}
+                                  {isDone && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white flex items-center justify-center">
+                                      <svg width="7" height="7" viewBox="0 0 10 10" fill="none">
+                                        <path d="M1.5 5L4 7.5L8.5 3" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                  {isInProgress && !isDone && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-sky-500 rounded-full ring-2 ring-white flex items-center justify-center">
+                                      <span className="w-1 h-1 bg-white rounded-full animate-pulse" />
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {task.assigneeCount > 4 && (
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-600 ring-2 ring-white">
+                                +{task.assigneeCount - 4}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-1 max-w-[220px]">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden ring-1 ring-gray-100">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  task.progress === 100
+                                    ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
+                                    : task.progress > 0
+                                    ? "bg-gradient-to-r from-orange-400 to-orange-500"
+                                    : "bg-gray-200"
+                                }`}
+                                style={{ width: `${task.progress}%` }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-bold whitespace-nowrap tabular-nums ${
+                              task.progress === 100 ? "text-emerald-600" : task.progress > 0 ? "text-orange-600" : "text-gray-400"
+                            }`}>
+                              {task.completedCount}/{task.assigneeCount}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -2042,7 +2811,7 @@ export default function TasksPage() {
 
               <div className="flex justify-center mt-5">
                 <button onClick={fetchTasks}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 shadow-sm">
+                  className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-2xl hover:bg-orange-600 shadow-lg shadow-orange-200 transition-all hover:-translate-y-0.5 cursor-pointer">
                   <RefreshCw size={14} /> Refresh
                 </button>
               </div>
@@ -2062,13 +2831,28 @@ export default function TasksPage() {
         />
       )}
 
-      {/* 👇 Task Detail Modal */}
       {detailTaskId && (
         <TaskDetailModal
           taskId={detailTaskId}
           onClose={() => setDetailTaskId(null)}
           onStatusChange={fetchTasks}
+          onDeleted={(title) => { setDetailTaskId(null); setDeletedToast(title); fetchTasks(); }}
         />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete this task?"
+          message={`"${deleteTarget.title}" will be permanently removed. This action cannot be undone.`}
+          confirmLabel="Delete Task"
+          loading={rowDeleting}
+          onConfirm={handleRowDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {deletedToast && (
+        <DeletedToast taskTitle={deletedToast} onClose={() => setDeletedToast(null)} />
       )}
     </div>
   );

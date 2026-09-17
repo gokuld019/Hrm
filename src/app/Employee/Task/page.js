@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
@@ -28,6 +28,7 @@ const I = {
   folder:     "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
   x:          "M18 6L6 18M6 6l12 12",
   chevRight:  "M9 18l6-6-6-6",
+  chevDown:   "M6 9l6 6 6-6",
   moreV:      "M12 5h.01M12 12h.01M12 19h.01",
   alertCircle:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01",
   checkCircle:"M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3",
@@ -35,6 +36,13 @@ const I = {
   tag:        "M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01",
   user:       "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   grip:       "M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01",
+  eye:        "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  plus:       "M12 5v14M5 12h14",
+  messageSquare: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  activity:   "M22 12h-4l-3 9L9 3l-3 9H2",
+  send:       "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z",
+  edit3:      "M12 20h9 M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z",
+  history:    "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5 M12 7v5l4 2",
 };
 
 const PRIORITY_CFG = {
@@ -43,7 +51,6 @@ const PRIORITY_CFG = {
   low:    { dot: "#22c55e", bg: "#f0fdf4", text: "#16a34a", label: "Low",    bar: "#22c55e" },
 };
 
-// Matches DB enum exactly: pending, in_progress, completed, overdue
 const STATUS_CFG = {
   pending:     { bg: "#fef9c3", text: "#854d0e", dot: "#f59e0b", label: "Pending",     col: "#f59e0b", icon: I.circle      },
   in_progress: { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "In Progress", col: "#3b82f6", icon: I.clock       },
@@ -59,11 +66,11 @@ const statusKey = s => {
 };
 const priorityKey = p => (p ?? "").toLowerCase();
 
-// ── Auto-overdue: if due_date passed and not completed, treat as overdue ──
-const effectiveStatus = (task) => {
-  const raw = statusKey(task?.status);
+const resolveMyStatus = (task) => {
+  if (!task) return "pending";
+  const raw = statusKey(task.my_status || task.status);
   if (raw === "completed") return "completed";
-  if (task?.due_date) {
+  if (task.due_date) {
     const due = new Date(task.due_date);
     due.setHours(23, 59, 59, 999);
     if (new Date() > due) return "overdue";
@@ -86,9 +93,402 @@ function SBadge({ s }) {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, background: c.bg, fontSize: 10, fontWeight: 700, color: c.text }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: c.dot }} />{c.label}</span>;
 }
 
-// ─── Kanban Card ──────────────────────────────────────────────────────────────
+// ⭐═══════════════════════════════════════════════════════════════════════════
+// STATUS CHANGE MODAL — prompts for notes before updating
+// ⭐═══════════════════════════════════════════════════════════════════════════
+function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, onCancel, submitting }) {
+  const [notes, setNotes] = useState("");
+  const [touched, setTouched] = useState(false);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setNotes("");
+      setTouched(false);
+      setTimeout(() => textareaRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape" && isOpen && !submitting) onCancel();
+    };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [isOpen, submitting, onCancel]);
+
+  if (!isOpen || !task) return null;
+
+  const newCfg = STATUS_CFG[statusKey(newStatus)];
+  const oldCfg = STATUS_CFG[statusKey(currentStatus)];
+
+  // Notes recommendations by transition
+  const isReopening = currentStatus === "completed" && newStatus !== "completed";
+  const isCompleting = newStatus === "completed" && currentStatus !== "completed";
+  const notesPlaceholder = isReopening
+    ? "Why are you reopening this task? (e.g., Found bugs, needs rework...)"
+    : isCompleting
+    ? "Add optional notes about the completion (e.g., All sections done...)"
+    : "Add notes about this status change (optional)";
+
+  const isRequired = isReopening; // Reopening reasons should be documented
+  const canSubmit = !submitting && (!isRequired || notes.trim().length >= 3);
+
+  const handleSubmit = () => {
+    setTouched(true);
+    if (!canSubmit) return;
+    onConfirm(notes.trim() || null);
+  };
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !submitting) onCancel(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, animation: "fadeIn 0.15s ease",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480,
+          background: "#fff", borderRadius: 20,
+          boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+          animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+            <div style={{
+              width: 42, height: 42, borderRadius: 12,
+              background: `linear-gradient(135deg, ${newCfg.col}, ${newCfg.col}dd)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 6px 20px ${newCfg.col}44`, flexShrink: 0,
+            }}>
+              <Ico d={I.edit3} size={19} stroke="#fff" sw={2.2} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.2px" }}>
+                Change Status
+              </h3>
+              <p style={{ margin: "3px 0 0", fontSize: 11.5, color: "#94a3b8", fontWeight: 500 }}>
+                Task #{task.id} · {task.title}
+              </p>
+            </div>
+            <button
+              onClick={onCancel}
+              disabled={submitting}
+              style={{
+                width: 32, height: 32, borderRadius: 9,
+                background: "#f9fafb", border: "1px solid #e5e7eb",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: submitting ? "not-allowed" : "pointer", flexShrink: 0,
+                opacity: submitting ? 0.5 : 1,
+              }}
+            >
+              <Ico d={I.x} size={14} stroke="#6b7280" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "20px 24px" }}>
+          {/* Status transition */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "14px 16px", borderRadius: 14,
+            background: "linear-gradient(135deg, #f8fafc, #f1f5f9)",
+            border: "1px solid #e2e8f0", marginBottom: 20,
+          }}>
+            <SBadge s={currentStatus} />
+            <Ico d={I.chevRight} size={14} stroke="#94a3b8" sw={2.2} />
+            <SBadge s={newStatus} />
+          </div>
+
+          {/* Notes input */}
+          <label style={{ display: "block", marginBottom: 8 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#374151" }}>
+              <Ico d={I.messageSquare} size={12} stroke="#6b7280" sw={2.2} />
+              {isReopening ? "Reason for reopening" : "Notes"}
+              {isRequired
+                ? <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span>
+                : <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional)</span>}
+            </span>
+          </label>
+
+          <textarea
+            ref={textareaRef}
+            value={notes}
+            onChange={e => { setNotes(e.target.value); if (touched) setTouched(false); }}
+            onBlur={() => setTouched(true)}
+            disabled={submitting}
+            placeholder={notesPlaceholder}
+            rows={4}
+            maxLength={1000}
+            style={{
+              width: "100%", padding: "12px 14px",
+              borderRadius: 12, fontSize: 13, lineHeight: 1.5,
+              border: `1.5px solid ${touched && isRequired && notes.trim().length < 3 ? "#fca5a5" : "#e5e7eb"}`,
+              outline: "none", resize: "vertical", fontFamily: "inherit",
+              background: submitting ? "#f9fafb" : "#fff",
+              color: "#1e293b", transition: "border-color 0.15s",
+              boxSizing: "border-box", minHeight: 100, maxHeight: 240,
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = newCfg.col}
+            onBlurCapture={e => e.currentTarget.style.borderColor = touched && isRequired && notes.trim().length < 3 ? "#fca5a5" : "#e5e7eb"}
+          />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+            <span style={{
+              fontSize: 11,
+              color: touched && isRequired && notes.trim().length < 3 ? "#dc2626" : "#94a3b8",
+              fontWeight: touched && isRequired && notes.trim().length < 3 ? 600 : 400,
+            }}>
+              {isRequired && notes.trim().length < 3
+                ? "⚠️ Minimum 3 characters required"
+                : isReopening
+                ? "💡 Helpful for tracking why work was reopened"
+                : "💡 Optional but helps with team coordination"}
+            </span>
+            <span style={{ fontSize: 10.5, color: "#cbd5e1", fontWeight: 600 }}>
+              {notes.length}/1000
+            </span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: "14px 24px", borderTop: "1px solid #f1f5f9",
+          background: "#fafbfc", display: "flex", justifyContent: "flex-end", gap: 10,
+        }}>
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            style={{
+              padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+              border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280",
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.5 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+              border: "none",
+              background: canSubmit
+                ? `linear-gradient(135deg, ${newCfg.col}, ${newCfg.col}dd)`
+                : "#e5e7eb",
+              color: canSubmit ? "#fff" : "#9ca3af",
+              cursor: canSubmit ? "pointer" : "not-allowed",
+              boxShadow: canSubmit ? `0 6px 18px ${newCfg.col}44` : "none",
+              transition: "all 0.15s",
+            }}
+          >
+            {submitting ? (
+              <><Spinner size={14} color="#fff" /> Saving…</>
+            ) : (
+              <><Ico d={I.send} size={13} stroke="#fff" sw={2.2} /> Confirm Change</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ⭐═══════════════════════════════════════════════════════════════════════════
+// ACTIVITY TIMELINE — status change history
+// ⭐═══════════════════════════════════════════════════════════════════════════
+function ActivityTimeline({ logs, loading }) {
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: 24 }}>
+        <Spinner size={16} />
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading activity…</span>
+      </div>
+    );
+  }
+
+  if (!logs || logs.length === 0) {
+    return (
+      <div style={{
+        padding: "20px 16px", textAlign: "center",
+        background: "#f9fafb", borderRadius: 10, border: "1px dashed #e5e7eb",
+      }}>
+        <Ico d={I.history} size={20} stroke="#cbd5e1" style={{ margin: "0 auto 8px" }} />
+        <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>No activity yet</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", paddingLeft: 22 }}>
+      {/* Vertical line */}
+      <div style={{
+        position: "absolute", left: 8, top: 10, bottom: 10,
+        width: 2, background: "#e5e7eb", borderRadius: 1,
+      }} />
+
+      {logs.map((log, idx) => {
+        const toCfg = STATUS_CFG[statusKey(log.to_status)];
+        const fromCfg = log.from_status ? STATUS_CFG[statusKey(log.from_status)] : null;
+        const date = log.changed_at ? new Date(log.changed_at) : null;
+
+        return (
+          <div key={log.id} style={{ position: "relative", paddingBottom: idx === logs.length - 1 ? 0 : 16 }}>
+            {/* Dot */}
+            <div style={{
+              position: "absolute", left: -22, top: 3,
+              width: 16, height: 16, borderRadius: "50%",
+              background: toCfg.dot, border: "3px solid #fff",
+              boxShadow: `0 0 0 1.5px ${toCfg.dot}44`,
+            }} />
+
+            {/* Content */}
+            <div style={{
+              background: "#f9fafb", borderRadius: 10,
+              padding: "10px 12px", border: "1px solid #f1f5f9",
+            }}>
+              {/* Transition row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: log.notes ? 8 : 4 }}>
+                {fromCfg ? (
+                  <>
+                    <SBadge s={log.from_status} />
+                    <Ico d={I.chevRight} size={11} stroke="#94a3b8" sw={2.2} />
+                    <SBadge s={log.to_status} />
+                  </>
+                ) : (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: toCfg.text }}>
+                    Assigned as <strong>{toCfg.label}</strong>
+                  </span>
+                )}
+              </div>
+
+              {/* Notes */}
+              {log.notes && (
+                <div style={{
+                  fontSize: 12, color: "#374151", lineHeight: 1.55,
+                  padding: "8px 10px", background: "#fff",
+                  borderRadius: 8, border: "1px solid #e5e7eb",
+                  whiteSpace: "pre-wrap", marginBottom: 6,
+                }}>
+                  {log.notes}
+                </div>
+              )}
+
+              {/* Meta */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                fontSize: 10, color: "#94a3b8", fontWeight: 500,
+              }}>
+                {log.employee && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <Ico d={I.user} size={10} stroke="#94a3b8" />
+                    {log.employee.name}
+                  </span>
+                )}
+                {date && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <Ico d={I.clock} size={10} stroke="#94a3b8" />
+                    {date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                    {" · "}
+                    {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Task Row ─────────────────────────────────────────────────────────────
+function TaskRow({ t, isDone, onToggle, onOpen, showStatus = true }) {
+  const st = resolveMyStatus(t);
+  const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
+  const done = isDone || st === "completed";
+
+  return (
+    <div
+      onClick={() => onOpen(t.id)}
+      style={{
+        display: "flex", alignItems: "center", gap: 14,
+        padding: "12px 20px",
+        borderBottom: "1px solid #f8fafc",
+        cursor: "pointer",
+        transition: "background 0.15s",
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = "#fffbf5"}
+      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+    >
+      <div
+        onClick={(e) => { e.stopPropagation(); onToggle(t.id); }}
+        style={{
+          width: 18, height: 18, borderRadius: 5,
+          border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`,
+          background: done ? "#22c55e" : "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", flexShrink: 0, transition: "all 0.15s",
+        }}
+      >
+        {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 13, color: done ? "#94a3b8" : "#1e293b", fontWeight: 600, textDecoration: done ? "line-through" : "none" }}>{t.title}</span>
+        {t.description && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</div>}
+      </div>
+
+      {showStatus && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <PBadge p={t.priority} />
+          <SBadge s={st} />
+          {t.my_status && t.status && t.my_status !== t.status && (
+            <span title={`Task-level: ${STATUS_CFG[statusKey(t.status)].label}`} style={{ fontSize: 9.5, color: "#94a3b8", padding: "2px 7px", background: "#f1f5f9", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
+              T: {STATUS_CFG[statusKey(t.status)].label}
+            </span>
+          )}
+          {t.due_date && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400, whiteSpace: "nowrap" }}>
+              <Ico d={I.calendar} size={11} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />
+              {new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ width: 3, height: 36, borderRadius: 2, background: pc.bar, flexShrink: 0 }} />
+
+      <button
+        onClick={(e) => { e.stopPropagation(); onOpen(t.id); }}
+        title="View details"
+        style={{
+          width: 30, height: 30, borderRadius: 8,
+          background: "#f9fafb", border: "1px solid #e5e7eb",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        <Ico d={I.eye} size={13} stroke="#6b7280" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Kanban Card ─────────────────────────────────────────────────────────────
 function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd, isDragging, updating }) {
-  const st = effectiveStatus(t);
+  const st = resolveMyStatus(t);
   const done = completedIds.has(t.id) || st === "completed";
   const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
 
@@ -97,6 +497,7 @@ function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd,
       draggable={!updating}
       onDragStart={(e) => onDragStart(e, t)}
       onDragEnd={onDragEnd}
+      onClick={() => onOpen(t.id)}
       style={{
         background: "#fff",
         borderRadius: 12,
@@ -120,12 +521,10 @@ function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd,
         e.currentTarget.style.transform = "scale(1)";
       }}
     >
-      {/* grip hint, top right */}
       <div style={{ position: "absolute", top: 10, right: 10, opacity: 0.25 }}>
         <Ico d={I.grip} size={12} stroke="#94a3b8" />
       </div>
 
-      {/* Priority bar */}
       <div style={{ height: 2, background: pc.bar, borderRadius: 1, marginBottom: 10, opacity: 0.7 }} />
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
@@ -141,17 +540,13 @@ function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd,
         >
           {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
         </div>
-        <span
-          onClick={(e) => { e.stopPropagation(); onOpen(t.id); }}
-          style={{
-            fontSize: 13, fontWeight: 600,
-            color: done ? "#94a3b8" : "#1e293b",
-            lineHeight: 1.4,
-            textDecoration: done ? "line-through" : "none",
-            transition: "all 0.15s", paddingRight: 12,
-            cursor: "pointer",
-          }}
-        >{t.title}</span>
+        <span style={{
+          fontSize: 13, fontWeight: 600,
+          color: done ? "#94a3b8" : "#1e293b",
+          lineHeight: 1.4,
+          textDecoration: done ? "line-through" : "none",
+          paddingRight: 12,
+        }}>{t.title}</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -170,60 +565,78 @@ function KanbanCard({ t, onToggle, onOpen, completedIds, onDragStart, onDragEnd,
           <span style={{ fontSize: 10, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.project.project_name ?? "Project"}</span>
         </div>
       )}
+
+      {t.my_status && t.status && t.my_status !== t.status && (
+        <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed #e5e7eb", fontSize: 9.5, color: "#7c3aed", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+          <Ico d={I.user} size={9} stroke="#7c3aed" sw={2.5} />
+          Your status: {STATUS_CFG[statusKey(t.my_status)]?.label}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Kanban Column ────────────────────────────────────────────────────────────
+// ─── Kanban Column ───────────────────────────────────────────────────────────
 function KanbanCol({ status, tasks, onToggle, onOpen, completedIds, onDrop, onDragStart, onDragEnd, draggingId, dragOverCol, onDragEnter, onDragLeave, updatingId }) {
   const cfg = STATUS_CFG[statusKey(status)];
   const isOver = dragOverCol === status;
   const isOverdueCol = status === "overdue";
 
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const scrollRef = useRef(null);
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [tasks.length]);
+
+  const handleScroll = (e) => {
+    const el = e.target;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 60) {
+      if (visibleCount < tasks.length) setVisibleCount(c => Math.min(c + PAGE_SIZE, tasks.length));
+    }
+  };
+
+  const visibleTasks = tasks.slice(0, visibleCount);
+  const hasMore = visibleCount < tasks.length;
+
   return (
     <div style={{ flex: "0 0 280px", display: "flex", flexDirection: "column", gap: 0 }}>
-      {/* Column header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#fff", borderRadius: "14px 14px 0 0", border: "1px solid #f1f5f9", borderBottom: `2px solid ${cfg.col}` }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.col, flexShrink: 0 }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", flex: 1 }}>{cfg.label}</span>
         <span style={{ fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.text, borderRadius: 20, padding: "1px 8px" }}>{tasks.length}</span>
       </div>
 
-      {/* Drop zone */}
       <div
+        ref={scrollRef}
+        onScroll={handleScroll}
         onDragOver={(e) => { if (!isOverdueCol) e.preventDefault(); }}
         onDragEnter={() => { if (!isOverdueCol) onDragEnter(status); }}
         onDragLeave={onDragLeave}
         onDrop={(e) => onDrop(e, status)}
         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
+          display: "flex", flexDirection: "column", gap: 8,
           background: isOver ? `${cfg.col}0D` : "#f8fafc",
           borderRadius: "0 0 14px 14px",
           border: `1px solid ${isOver ? cfg.col + "55" : "#f1f5f9"}`,
-          borderTop: "none",
-          padding: 10,
-          minHeight: 140,
+          borderTop: "none", padding: 10,
+          minHeight: 140, maxHeight: "calc(100vh - 260px)",
+          overflowY: "auto",
           transition: "background 0.15s ease, border-color 0.15s ease",
         }}
       >
         {tasks.length === 0 ? (
           <div style={{
-            textAlign: "center",
-            padding: "28px 0",
+            textAlign: "center", padding: "28px 0",
             color: isOver ? cfg.col : "#cbd5e1",
-            fontSize: 12,
-            fontWeight: isOver ? 700 : 400,
+            fontSize: 12, fontWeight: isOver ? 700 : 400,
             border: `2px dashed ${isOver ? cfg.col : "transparent"}`,
-            borderRadius: 10,
-            transition: "all 0.15s ease",
+            borderRadius: 10, transition: "all 0.15s ease",
           }}>
             {isOver ? "Drop here" : (isOverdueCol ? "Auto-managed" : "No tasks")}
           </div>
         ) : (
           <>
-            {tasks.map(t => (
+            {visibleTasks.map(t => (
               <KanbanCard
                 key={t.id}
                 t={t}
@@ -236,10 +649,30 @@ function KanbanCol({ status, tasks, onToggle, onOpen, completedIds, onDrop, onDr
                 updating={updatingId === t.id}
               />
             ))}
+
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount(c => Math.min(c + PAGE_SIZE, tasks.length))}
+                style={{
+                  padding: "8px 12px",
+                  background: "#fff",
+                  border: `1px dashed ${cfg.col}66`,
+                  borderRadius: 10, fontSize: 11, fontWeight: 700,
+                  color: cfg.col, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  gap: 6, transition: "all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = `${cfg.col}0D`; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
+              >
+                <Ico d={I.chevDown} size={12} stroke={cfg.col} sw={2.5} />
+                Load {Math.min(PAGE_SIZE, tasks.length - visibleCount)} more ({tasks.length - visibleCount} left)
+              </button>
+            )}
+
             {isOver && draggingId && !isOverdueCol && (
               <div style={{
-                height: 56,
-                borderRadius: 12,
+                height: 56, borderRadius: 12,
                 border: `2px dashed ${cfg.col}`,
                 background: `${cfg.col}0D`,
                 animation: "pulseBox 1.1s ease-in-out infinite",
@@ -252,7 +685,7 @@ function KanbanCol({ status, tasks, onToggle, onOpen, completedIds, onDrop, onDr
   );
 }
 
-// ─── Task Detail Drawer ───────────────────────────────────────────────────────
+// ─── Task Detail Drawer ──────────────────────────────────────────────────────
 function MetaRow({ icon, label, value, danger }) {
   return (
     <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
@@ -268,10 +701,22 @@ function MetaRow({ icon, label, value, danger }) {
 }
 
 function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  // Fetch status logs when task opens
+  useEffect(() => {
+    if (!task?.id) return;
+    setLogsLoading(true);
+    fetch(`${BASE}/api/employee/tasks/${task.id}/status-logs`, { headers: HEADERS() })
+      .then(r => r.json())
+      .then(json => { if (json.success) setLogs(json.data || []); })
+      .catch(console.error)
+      .finally(() => setLogsLoading(false));
+  }, [task?.id]);
+
   if (!task) return null;
-  const st = effectiveStatus(task);
-  const sc = STATUS_CFG[st];
-  const pc = PRIORITY_CFG[priorityKey(task.priority)] || PRIORITY_CFG.medium;
+  const st = resolveMyStatus(task);
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString("en-GB", {
     day: "2-digit", month: "short", year: "numeric"
@@ -279,22 +724,19 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
 
   return (
     <>
-      {/* Backdrop */}
       <div onClick={onClose} style={{
         position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
         zIndex: 200, animation: "fadeIn 0.15s ease",
       }} />
 
-      {/* Drawer */}
       <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0, width: 460,
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 480,
         maxWidth: "92vw", background: "#fff", zIndex: 201,
         boxShadow: "-12px 0 40px rgba(0,0,0,0.14)",
         display: "flex", flexDirection: "column",
         animation: "slideIn 0.22s ease",
         fontFamily: "'Plus Jakarta Sans',-apple-system,sans-serif",
       }}>
-        {/* Header */}
         <div style={{
           padding: "18px 22px", borderBottom: "1px solid #f1f5f9",
           display: "flex", alignItems: "center", gap: 10,
@@ -313,7 +755,6 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
           </button>
         </div>
 
-        {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "22px" }}>
           {loading ? (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: 60 }}>
@@ -331,6 +772,26 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
                 <PBadge p={task.priority} />
               </div>
 
+              {task.my_status && task.status && task.my_status !== task.status && (
+                <div style={{
+                  marginBottom: 20, padding: "10px 14px",
+                  background: "linear-gradient(135deg, #ede9fe, #f5f3ff)",
+                  borderRadius: 10, border: "1px solid #c4b5fd",
+                  display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <Ico d={I.user} size={16} stroke="#7c3aed" sw={2.5} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#6d28d9", fontWeight: 700, marginBottom: 2 }}>
+                      YOUR STATUS
+                    </div>
+                    <div style={{ fontSize: 12, color: "#4c1d95", fontWeight: 600 }}>
+                      You marked this as <strong>{STATUS_CFG[statusKey(task.my_status)]?.label}</strong>
+                      {task.my_completed_at && <> · {new Date(task.my_completed_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {task.description && (
                 <div style={{ marginBottom: 22 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 6 }}>
@@ -342,7 +803,6 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
                 </div>
               )}
 
-              {/* Meta grid */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
                 <MetaRow icon={I.calendar} label="Start Date" value={fmt(task.start_date)} />
                 <MetaRow icon={I.calendar} label="Due Date" value={fmt(task.due_date)} danger={st === "overdue"} />
@@ -350,10 +810,63 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
                 <MetaRow icon={I.user} label="Created By" value={task.creator?.name ?? "—"} />
               </div>
 
-              {/* Status changer */}
+              {task.assignees && task.assignees.length > 0 && (
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>
+                    Team Progress ({task.assignees.filter(a => a.pivot?.status === "completed").length}/{task.assignees.length})
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {task.assignees.map(a => {
+                      const name = `${a.firstname || ""} ${a.lastname || ""}`.trim() || a.email;
+                      const aStatus = statusKey(a.pivot?.status);
+                      const aCfg = STATUS_CFG[aStatus];
+                      return (
+                        <div key={a.id} style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          background: "#f9fafb", borderRadius: 10,
+                          padding: "8px 12px", border: "1px solid #f1f5f9",
+                        }}>
+                          <div style={{
+                            width: 26, height: 26, borderRadius: "50%",
+                            background: aCfg.dot, color: "#fff",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, fontWeight: 700, flexShrink: 0,
+                          }}>
+                            {(a.firstname?.[0] || "") + (a.lastname?.[0] || "")}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {name}
+                            </div>
+                            {a.employee_id && (
+                              <div style={{ fontSize: 10, color: "#94a3b8" }}>{a.employee_id}</div>
+                            )}
+                          </div>
+                          <SBadge s={aStatus} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ⭐ Activity Timeline */}
+              <div style={{ marginBottom: 22 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Ico d={I.history} size={11} stroke="#94a3b8" />
+                  Activity Timeline
+                  {logs.length > 0 && (
+                    <span style={{ fontSize: 9.5, fontWeight: 700, background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: 8 }}>
+                      {logs.length}
+                    </span>
+                  )}
+                </div>
+                <ActivityTimeline logs={logs} loading={logsLoading} />
+              </div>
+
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>
-                  Status
+                  Your Status
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {STATUSES.filter(s => s !== "overdue").map(s => {
@@ -394,7 +907,60 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Project Group ──────────────────────────────────────────────────────────
+function ProjectGroup({ proj, tasks, onToggle, onOpen, completedIds }) {
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [tasks.length]);
+
+  const doneCnt = tasks.filter(t => resolveMyStatus(t) === "completed").length;
+  const visibleTasks = tasks.slice(0, visibleCount);
+  const hasMore = visibleCount < tasks.length;
+
+  return (
+    <div style={{ borderBottom: "1px solid #f8fafc" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", background: "#f9fafb", borderBottom: "1px solid #f1f5f9" }}>
+        <Ico d={I.folder} size={15} stroke="#f97316" />
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flex: 1 }}>{proj.project_name}</span>
+        <span style={{ fontSize: 11, color: "#94a3b8" }}>{doneCnt}/{tasks.length} done</span>
+        <div style={{ width: 80, height: 4, background: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{ width: `${tasks.length > 0 ? (doneCnt / tasks.length) * 100 : 0}%`, height: "100%", background: "#22c55e", borderRadius: 2 }} />
+        </div>
+      </div>
+
+      {visibleTasks.map((t) => (
+        <TaskRow
+          key={t.id}
+          t={t}
+          isDone={completedIds.has(t.id)}
+          onToggle={onToggle}
+          onOpen={onOpen}
+        />
+      ))}
+
+      {hasMore && (
+        <button
+          onClick={() => setVisibleCount(c => Math.min(c + PAGE_SIZE, tasks.length))}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            width: "100%", padding: "10px 16px",
+            background: "#fff", border: "none", borderTop: "1px dashed #e5e7eb",
+            fontSize: 11.5, fontWeight: 700, color: "#f97316",
+            cursor: "pointer", transition: "background 0.15s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "#fff7ed"}
+          onMouseLeave={e => e.currentTarget.style.background = "#fff"}
+        >
+          <Ico d={I.chevDown} size={12} stroke="#f97316" sw={2.5} />
+          Show {Math.min(PAGE_SIZE, tasks.length - visibleCount)} more ({tasks.length - visibleCount} remaining)
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const router = useRouter();
   const [allTasks, setAllTasks] = useState([]);
@@ -406,14 +972,21 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [search, setSearch] = useState("");
 
-  // drag state
   const [draggingTask, setDraggingTask] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  // detail drawer state
   const [detailTask, setDetailTask] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // ⭐ Status change modal state
+  const [statusModal, setStatusModal] = useState({
+    isOpen: false,
+    task: null,
+    currentStatus: null,
+    newStatus: null,
+  });
+  const [statusSubmitting, setStatusSubmitting] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -423,6 +996,7 @@ export default function TasksPage() {
       let tasks = [];
       if (json.success && Array.isArray(json.data)) tasks = json.data;
       else if (Array.isArray(json.data?.tasks)) tasks = json.data.tasks;
+
       setAllTasks(tasks);
       const projectMap = new Map();
       tasks.forEach(t => {
@@ -442,52 +1016,91 @@ export default function TasksPage() {
     return n;
   });
 
-  // ── Update status via API, with optimistic UI ──────────────────────
-  const updateTaskStatus = async (task, newStatus) => {
+  // ⭐ OPEN status modal (instead of directly updating)
+  const openStatusModal = (task, newStatus) => {
+    const currentStatus = resolveMyStatus(task);
+    if (currentStatus === newStatus) return;
+    setStatusModal({
+      isOpen: true,
+      task,
+      currentStatus,
+      newStatus,
+    });
+  };
+
+  // ⭐ CONFIRM status change with notes
+  const confirmStatusChange = async (notes) => {
+    const { task, newStatus } = statusModal;
+    if (!task) return;
+
+    setStatusSubmitting(true);
+    const prevMyStatus = task.my_status;
     const prevStatus = task.status;
+
     setUpdatingId(task.id);
 
-    // optimistic update
-    setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
-    // sync drawer if open
-    setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, status: newStatus } : prev);
+    // Optimistic update
+    setAllTasks(prev => prev.map(t => t.id === task.id ? {
+      ...t,
+      my_status: newStatus,
+      my_completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+    } : t));
+
+    setDetailTask(prev => (prev && prev.id === task.id) ? {
+      ...prev,
+      my_status: newStatus,
+      my_completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+    } : prev);
 
     try {
       const res = await fetch(`${BASE}/api/employee/tasks/${task.id}/status`, {
         method: "PUT",
         headers: HEADERS(),
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, notes }),
       });
       if (!res.ok) throw new Error("Failed to update status");
+
+      // Close modal + refetch
+      setStatusModal({ isOpen: false, task: null, currentStatus: null, newStatus: null });
+      await fetchTasks();
+
+      // Re-fetch detail if open
+      if (detailTask?.id === task.id) {
+        const freshRes = await fetch(`${BASE}/api/employee/tasks/${task.id}`, { headers: HEADERS() });
+        const freshJson = await freshRes.json();
+        if (freshJson.success && freshJson.data) setDetailTask(freshJson.data);
+      }
     } catch (e) {
       console.error(e);
-      // revert on failure
-      setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: prevStatus } : t));
-      setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, status: prevStatus } : prev);
+      setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, my_status: prevMyStatus, status: prevStatus } : t));
+      setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, my_status: prevMyStatus, status: prevStatus } : prev);
       alert("Couldn't update task status. Please try again.");
     } finally {
       setUpdatingId(null);
+      setStatusSubmitting(false);
     }
   };
 
-  // ── Open task detail (fetch fresh) ─────────────────────────────────
   const openTaskDetail = async (taskId) => {
-    // Use cached task object immediately for snappy UX
+    if (!taskId) return;
     const cached = allTasks.find(t => t.id === taskId);
-    setDetailTask(cached ?? { id: taskId });
+    if (cached) setDetailTask(cached);
+    else setDetailTask({ id: taskId, title: "Loading…" });
+
     setDetailLoading(true);
     try {
       const res = await fetch(`${BASE}/api/employee/tasks/${taskId}`, { headers: HEADERS() });
       const json = await res.json();
       if (json.success && json.data) setDetailTask(json.data);
+      else if (cached) setDetailTask(cached);
     } catch (e) {
       console.error(e);
+      if (!cached) alert("Couldn't load task details.");
     } finally {
       setDetailLoading(false);
     }
   };
 
-  // ── Drag handlers ───────────────────────────────────────────────────
   const handleDragStart = (e, task) => {
     setDraggingTask(task);
     e.dataTransfer.effectAllowed = "move";
@@ -500,11 +1113,12 @@ export default function TasksPage() {
     e.preventDefault();
     setDragOverCol(null);
     if (!draggingTask) return;
-    // Block manual drop into Overdue — it's auto-managed
     if (newStatus === "overdue") { setDraggingTask(null); return; }
-    const current = effectiveStatus(draggingTask);
+    const current = resolveMyStatus(draggingTask);
     if (current === newStatus) { setDraggingTask(null); return; }
-    updateTaskStatus(draggingTask, newStatus);
+
+    // ⭐ Instead of direct update — open modal!
+    openStatusModal(draggingTask, newStatus);
     setDraggingTask(null);
   };
 
@@ -516,15 +1130,15 @@ export default function TasksPage() {
   });
 
   const byStatus = STATUSES.reduce((acc, s) => {
-    acc[s] = filtered.filter(t => effectiveStatus(t) === s);
+    acc[s] = filtered.filter(t => resolveMyStatus(t) === s);
     return acc;
   }, {});
 
   const stats = {
     total:  allTasks.length,
-    done:   allTasks.filter(t => effectiveStatus(t) === "completed" || completedIds.has(t.id)).length,
+    done:   allTasks.filter(t => resolveMyStatus(t) === "completed").length,
     high:   allTasks.filter(t => priorityKey(t.priority) === "high").length,
-    inprog: allTasks.filter(t => effectiveStatus(t) === "in_progress").length,
+    inprog: allTasks.filter(t => resolveMyStatus(t) === "in_progress").length,
   };
 
   return (
@@ -534,9 +1148,13 @@ export default function TasksPage() {
         @keyframes pulseBox{0%,100%{opacity:0.55}50%{opacity:1}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+        @keyframes modalIn{from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        ::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
-      {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid #f1f5f9", padding: "14px 28px", display: "flex", alignItems: "center", gap: 14, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={() => router.back()} style={{ display: "flex", alignItems: "center", gap: 7, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}
           onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"} onMouseLeave={e => e.currentTarget.style.background = "#f9fafb"}>
@@ -545,7 +1163,7 @@ export default function TasksPage() {
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a" }}>My Tasks</h1>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            {view === "kanban" ? "Drag a card to change its status · Click a title for details" : "Track and manage your work"}
+            {view === "kanban" ? "Drag a card to change your status · Click a title for details" : "Track and manage your work"}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -571,10 +1189,8 @@ export default function TasksPage() {
       </div>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Sidebar: project list */}
         <div style={{ width: 256, borderRight: "1px solid #f1f5f9", background: "#fff", padding: "16px 12px", overflowY: "auto", flexShrink: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px", padding: "0 8px 8px" }}>Projects</div>
-          {/* Stats cards */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {[
               { label: "Total",    value: stats.total,  color: "#f97316" },
@@ -588,7 +1204,6 @@ export default function TasksPage() {
               </div>
             ))}
           </div>
-          {/* Project filter list */}
           {[{ id: "all", project_name: "All Projects", taskCount: allTasks.length }, ...projects].map(p => {
             const isActive = selectedProject === p.id;
             return (
@@ -604,7 +1219,6 @@ export default function TasksPage() {
           })}
         </div>
 
-        {/* Main content */}
         <div style={{ flex: 1, overflowX: "auto", overflowY: "auto", padding: "20px 24px" }}>
           {loading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 100, gap: 12 }}>
@@ -619,7 +1233,6 @@ export default function TasksPage() {
               <div style={{ fontSize: 12, color: "#94a3b8" }}>Try a different project or filter</div>
             </div>
           ) : view === "kanban" ? (
-            /* ── Kanban ── */
             <div style={{ display: "flex", gap: 14, minWidth: "max-content", paddingBottom: 20 }}>
               {STATUSES.map(s => (
                 <KanbanCol
@@ -641,85 +1254,33 @@ export default function TasksPage() {
               ))}
             </div>
           ) : (
-            /* ── List view ── */
             <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #f1f5f9", overflow: "hidden" }}>
-              {/* Group by project */}
               {(selectedProject === "all" ? projects : projects.filter(p => p.id === selectedProject)).map(proj => {
                 const projTasks = filtered.filter(t => t.project?.id === proj.id);
                 if (projTasks.length === 0) return null;
-                const doneCnt = projTasks.filter(t => completedIds.has(t.id) || effectiveStatus(t) === "completed").length;
                 return (
-                  <div key={proj.id} style={{ borderBottom: "1px solid #f8fafc" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", background: "#f9fafb", borderBottom: "1px solid #f1f5f9" }}>
-                      <Ico d={I.folder} size={15} stroke="#f97316" />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flex: 1 }}>{proj.project_name}</span>
-                      <span style={{ fontSize: 11, color: "#94a3b8" }}>{doneCnt}/{projTasks.length} done</span>
-                      <div style={{ width: 80, height: 4, background: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
-                        <div style={{ width: `${projTasks.length > 0 ? (doneCnt / projTasks.length) * 100 : 0}%`, height: "100%", background: "#22c55e", borderRadius: 2 }} />
-                      </div>
-                    </div>
-                    {projTasks.map((t, i) => {
-                      const st = effectiveStatus(t);
-                      const done = completedIds.has(t.id) || st === "completed";
-                      const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
-                      return (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < projTasks.length - 1 ? "1px solid #f8fafc" : "none", cursor: "pointer" }}
-                          onClick={() => openTaskDetail(t.id)}
-                          onMouseEnter={e => e.currentTarget.style.background = "#fffbf5"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div onClick={(e) => { e.stopPropagation(); toggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}>
-                            {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ fontSize: 13, color: done ? "#94a3b8" : "#1e293b", fontWeight: 500, textDecoration: done ? "line-through" : "none" }}>{t.title}</span>
-                            {t.description && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</div>}
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <PBadge p={t.priority} />
-                            <SBadge s={st} />
-                            {t.due_date && (
-                              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400, whiteSpace: "nowrap" }}>
-                                <Ico d={I.calendar} size={11} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />
-                                {new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                              </span>
-                            )}
-                          </div>
-                          {/* Left priority indicator */}
-                          <div style={{ width: 3, height: 36, borderRadius: 2, background: pc.bar, flexShrink: 0 }} />
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ProjectGroup
+                    key={proj.id}
+                    proj={proj}
+                    tasks={projTasks}
+                    onToggle={toggle}
+                    onOpen={openTaskDetail}
+                    completedIds={completedIds}
+                  />
                 );
               })}
-              {/* Tasks with no project */}
+
               {(() => {
                 const orphans = filtered.filter(t => !t.project);
                 if (orphans.length === 0) return null;
                 return (
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", background: "#f9fafb", borderBottom: "1px solid #f1f5f9" }}>
-                      <Ico d={I.tag} size={15} stroke="#94a3b8" />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>Unassigned</span>
-                      <span style={{ fontSize: 11, color: "#94a3b8" }}>{orphans.length} tasks</span>
-                    </div>
-                    {orphans.map((t, i) => {
-                      const st = effectiveStatus(t);
-                      const done = completedIds.has(t.id) || st === "completed";
-                      return (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 20px", borderBottom: i < orphans.length - 1 ? "1px solid #f8fafc" : "none", cursor: "pointer" }}
-                          onClick={() => openTaskDetail(t.id)}
-                          onMouseEnter={e => e.currentTarget.style.background = "#fffbf5"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div onClick={(e) => { e.stopPropagation(); toggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                            {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
-                          </div>
-                          <span style={{ flex: 1, fontSize: 13, color: done ? "#94a3b8" : "#1e293b", textDecoration: done ? "line-through" : "none" }}>{t.title}</span>
-                          <PBadge p={t.priority} /><SBadge s={st} />
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ProjectGroup
+                    proj={{ id: "orphan", project_name: "Unassigned" }}
+                    tasks={orphans}
+                    onToggle={toggle}
+                    onOpen={openTaskDetail}
+                    completedIds={completedIds}
+                  />
                 );
               })()}
             </div>
@@ -727,12 +1288,22 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Task Detail Drawer */}
+      {/* ⭐ Status Change Modal */}
+      <StatusChangeModal
+        isOpen={statusModal.isOpen}
+        task={statusModal.task}
+        currentStatus={statusModal.currentStatus}
+        newStatus={statusModal.newStatus}
+        onConfirm={confirmStatusChange}
+        onCancel={() => !statusSubmitting && setStatusModal({ isOpen: false, task: null, currentStatus: null, newStatus: null })}
+        submitting={statusSubmitting}
+      />
+
       <TaskDetailDrawer
         task={detailTask}
         loading={detailLoading}
         onClose={() => { setDetailTask(null); setDetailLoading(false); }}
-        onStatusChange={(task, newStatus) => updateTaskStatus(task, newStatus)}
+        onStatusChange={(task, newStatus) => openStatusModal(task, newStatus)}
       />
     </div>
   );
