@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
 const HEADERS = () => ({
-  Authorization: `Bearer ${localStorage.getItem("employee_auth_token")}`,
+  "Authorization": `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
-  Accept: "application/json",
+  "Accept": "application/json",
   "Content-Type": "application/json",
 });
 
