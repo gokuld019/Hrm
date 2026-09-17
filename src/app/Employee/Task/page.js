@@ -418,7 +418,7 @@ export default function TasksPage() {
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/api/employee/tasks/`, { headers: HEADERS() });
+      const res  = await fetch(`${BASE}/api/employee/tasks`, { headers: HEADERS() });
       const json = await res.json();
       let tasks = [];
       if (json.success && Array.isArray(json.data)) tasks = json.data;
