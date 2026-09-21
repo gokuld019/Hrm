@@ -813,234 +813,6 @@ function CardMenu({ onEdit, onDelete }) {
   );
 }
 
-// ── EMPLOYEE DETAIL DRAWER ────────────────────────────────────────────
-// Shows: Attendance (today), Projects assigned, Tasks assigned, Productivity breakdown
-function EmployeeDetailDrawer({ emp, onClose, allProjects, allTasks, attendanceMap }) {
-  const empId       = emp.id;
-  const name        = getFullName(emp);
-  const role        = getRole(emp);
-  const avatarSrc   = emp.profile_image || emp.avatar || null;
-  const avatarBg    = AVATAR_COLORS[empId % AVATAR_COLORS.length];
-  const initials    = getInitials(emp);
-  const isActive    = emp.status === "active" || emp.status === 1;
-
-  // Filter projects this employee is part of (team_member, manager, or team_leader)
-  const empProjects = allProjects.filter(p =>
-    p.project_manager_id === empId ||
-    p.team_leader_id === empId ||
-    (p.team_members || []).some(m => m.id === empId)
-  );
-
-  // Filter tasks assigned to this employee
-  const empTasks = allTasks.filter(t => (t.assignees || []).some(a => a.id === empId));
-
-  // Task breakdowns
-  const taskPending    = empTasks.filter(t => t.status === "pending").length;
-  const taskProgress   = empTasks.filter(t => t.status === "in_progress").length;
-  const taskCompleted  = empTasks.filter(t => t.status === "completed").length;
-  const taskTotal      = empTasks.length;
-
-  // Attendance today
-  const attendance = attendanceMap[empId];
-  const isPresent  = attendance?.status === "Present" || attendance?.status === "Late";
-  const isLate     = attendance?.status === "Late";
-  const prodHours  = attendance?.production_hours ? Number(attendance.production_hours).toFixed(2) : "0.00";
-  const checkIn    = attendance?.check_in  || "—";
-  const checkOut   = attendance?.check_out || "—";
-  const lateMin    = attendance?.late_minutes || 0;
-
-  // Compute overall productivity score:
-  // 50% from tasks (completed / total), 50% from production hours (out of 9 hrs)
-  const taskScore  = taskTotal > 0 ? Math.round((taskCompleted / taskTotal) * 100) : 0;
-  const hoursScore = Math.min(100, Math.round((Number(prodHours) / 9) * 100));
-  const overallProd = taskTotal > 0 ? Math.round((taskScore * 0.5) + (hoursScore * 0.5)) : hoursScore;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:justify-end">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}/>
-      <div className="relative bg-white w-full sm:w-[420px] h-[90vh] sm:h-full rounded-t-3xl sm:rounded-l-3xl sm:rounded-r-none shadow-2xl z-10 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <p className="text-sm font-bold text-gray-800">Employee Details</p>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition"><X size={15}/></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {/* Profile */}
-          <div className="px-5 py-5 border-b border-gray-100">
-            <div className="flex items-center gap-4">
-              {avatarSrc
-                ? <img src={avatarSrc} alt={name} className="w-16 h-16 rounded-2xl object-cover ring-2 ring-white shadow-md"/>
-                : <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-md" style={{ backgroundColor: avatarBg }}>{initials}</div>
-              }
-              <div>
-                <p className="text-base font-bold text-gray-900">{name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{emp.employee_id}</p>
-                <p className="text-xs font-semibold text-orange-500 mt-0.5">{role}</p>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 ${isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-green-500" : "bg-gray-400"}`}/>
-                  {isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Today's Attendance ──────────────────────────────────── */}
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Today's Attendance</p>
-            {!attendance ? (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-400">
-                <AlertCircle size={14}/> No attendance record for today
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${isPresent ? isLate ? "bg-yellow-50 text-yellow-600 border border-yellow-200" : "bg-green-50 text-green-600 border border-green-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
-                    <span className={`w-2 h-2 rounded-full ${isPresent ? isLate ? "bg-yellow-500" : "bg-green-500" : "bg-red-500"}`}/>
-                    {attendance.status}
-                    {isLate && lateMin > 0 && <span className="ml-1 text-yellow-500 font-normal">({lateMin}m late)</span>}
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                    <p className="text-[9px] text-gray-400 font-semibold mb-1">CHECK IN</p>
-                    <p className="text-xs font-bold text-gray-700">{checkIn}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                    <p className="text-[9px] text-gray-400 font-semibold mb-1">CHECK OUT</p>
-                    <p className="text-xs font-bold text-gray-700">{checkOut}</p>
-                  </div>
-                  <div className="bg-orange-50 rounded-xl p-2.5 border border-orange-100">
-                    <p className="text-[9px] text-orange-400 font-semibold mb-1">PROD. HRS</p>
-                    <p className="text-xs font-bold text-orange-600">{prodHours} Hrs</p>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ── Overall Productivity ────────────────────────────────── */}
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Overall Productivity</p>
-            <div className="flex items-center gap-4 mb-3">
-              <div className="relative w-16 h-16 shrink-0">
-                <svg className="w-16 h-16 -rotate-90" viewBox="0 0 56 56">
-                  <circle cx="28" cy="28" r="22" fill="none" stroke="#f1f5f9" strokeWidth="6"/>
-                  <circle cx="28" cy="28" r="22" fill="none" stroke={prodColor(overallProd)} strokeWidth="6"
-                    strokeDasharray={`${2 * Math.PI * 22}`}
-                    strokeDashoffset={`${2 * Math.PI * 22 * (1 - overallProd / 100)}`}
-                    strokeLinecap="round"/>
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-sm font-bold" style={{ color: prodColor(overallProd) }}>{overallProd}%</span>
-                </div>
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <div>
-                  <div className="flex justify-between mb-1"><span className="text-[10px] text-gray-400">Task Completion</span><span className="text-[10px] font-bold text-gray-700">{taskScore}%</span></div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width:`${taskScore}%`, backgroundColor: prodColor(taskScore) }}/></div>
-                </div>
-                <div>
-                  <div className="flex justify-between mb-1"><span className="text-[10px] text-gray-400">Working Hours</span><span className="text-[10px] font-bold text-gray-700">{hoursScore}%</span></div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width:`${hoursScore}%`, backgroundColor: prodColor(hoursScore) }}/></div>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label:"Pending",     val: taskPending,   bg:"#fff7ed", text:"#ea580c" },
-                { label:"In Progress", val: taskProgress,  bg:"#eff6ff", text:"#2563eb" },
-                { label:"Completed",   val: taskCompleted, bg:"#f0fdf4", text:"#16a34a" },
-              ].map(({ label, val, bg, text }) => (
-                <div key={label} className="rounded-xl p-2 text-center border" style={{ backgroundColor: bg, borderColor: bg }}>
-                  <p className="text-base font-bold" style={{ color: text }}>{val}</p>
-                  <p className="text-[9px] font-semibold" style={{ color: text }}>{label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Projects ────────────────────────────────────────────── */}
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">
-              Projects <span className="text-gray-400 font-normal ml-1">({empProjects.length})</span>
-            </p>
-            {empProjects.length === 0 ? (
-              <p className="text-xs text-gray-400 py-2">No projects assigned.</p>
-            ) : (
-              <div className="space-y-2">
-                {empProjects.map(p => {
-                  const scfg  = PROJECT_STATUS_CFG[p.status] || { label: p.status, bg: "#f8fafc", text: "#64748b" };
-                  const pcfg  = PRIORITY_CFG[p.priority]    || { bg: "#f8fafc", text: "#64748b" };
-                  const role  = p.project_manager_id === empId ? "Manager" : p.team_leader_id === empId ? "Lead" : "Member";
-                  return (
-                    <div key={p.id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50/20 transition-all">
-                      <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center shrink-0">
-                        <Layers size={14} className="text-orange-400"/>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-bold text-gray-800 truncate">{p.project_name}</p>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: scfg.bg, color: scfg.text }}>{scfg.label}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: pcfg.bg, color: pcfg.text }}>{p.priority}</span>
-                          <span className="text-[9px] text-gray-400">{p.project_code}</span>
-                          <span className="text-[9px] bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded font-semibold">{role}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 mt-1">Due: {p.end_date}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ── Tasks ───────────────────────────────────────────────── */}
-          <div className="px-5 py-4 pb-8">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">
-              Tasks <span className="text-gray-400 font-normal ml-1">({empTasks.length})</span>
-            </p>
-            {empTasks.length === 0 ? (
-              <p className="text-xs text-gray-400 py-2">No tasks assigned.</p>
-            ) : (
-              <div className="space-y-2">
-                {empTasks.map(t => {
-                  const scfg = TASK_STATUS_CFG[t.status] || { label: t.status, bg: "#f8fafc", text: "#64748b", dot: "#94a3b8" };
-                  const pcfg = PRIORITY_CFG[t.priority]  || { bg: "#f8fafc", text: "#64748b" };
-                  const due  = t.due_date ? new Date(t.due_date) : null;
-                  const now  = new Date();
-                  const isOverdue = due && due < now && t.status !== "completed";
-                  return (
-                    <div key={t.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${isOverdue ? "border-red-200 bg-red-50/30" : "border-gray-100 hover:border-orange-200 hover:bg-orange-50/20"}`}>
-                      <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: scfg.dot }}/>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-bold text-gray-800 truncate">{t.title}</p>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: scfg.bg, color: scfg.text }}>{scfg.label}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: pcfg.bg, color: pcfg.text }}>{t.priority}</span>
-                          <span className="text-[9px] text-gray-400">{t.project?.project_name}</span>
-                        </div>
-                        <p className={`text-[10px] mt-1 font-medium ${isOverdue ? "text-red-500" : "text-gray-400"}`}>
-                          {isOverdue ? "⚠ Overdue · " : "Due: "}
-                          {due ? due.toLocaleDateString("en-GB", { day:"2-digit", month:"short" }) : "—"}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── EMPLOYEE CARD ─────────────────────────────────────────────────────
 function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceMap, allTasks }) {
   const name         = getFullName(emp);
@@ -1052,19 +824,16 @@ function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceM
   const avatarSrc    = emp.profile_image || emp.avatar || emp.avatar_url || null;
   const isActive     = emp.status === "active" || emp.status === 1;
 
-  // Attendance today
   const attendance = attendanceMap[emp.id];
   const isPresent  = attendance?.status === "Present" || attendance?.status === "Late";
   const isLate     = attendance?.status === "Late";
   const prodHours  = attendance?.production_hours ? Number(attendance.production_hours).toFixed(2) : null;
 
-  // Task counts for this employee
   const empTasks    = allTasks.filter(t => (t.assignees || []).some(a => a.id === emp.id));
   const taskTotal   = empTasks.length;
   const taskDone    = empTasks.filter(t => t.status === "completed").length;
   const taskPending = empTasks.filter(t => t.status === "pending").length;
 
-  // Computed productivity
   const taskScore   = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
   const hoursScore  = prodHours ? Math.min(100, Math.round((Number(prodHours) / 9) * 100)) : 0;
   const compProd    = taskTotal > 0 || prodHours ? Math.round((taskScore * 0.5) + (hoursScore * 0.5)) : productivity;
@@ -1073,7 +842,6 @@ function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceM
   return (
     <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 group">
       <div className="flex items-start justify-between mb-3">
-        {/* Attendance badge */}
         <div className="flex items-center gap-1.5">
           <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-green-500" : "bg-gray-400"}`}/>
@@ -1098,7 +866,6 @@ function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceM
         <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full mt-1.5" style={{ color: roleColor, backgroundColor: roleColor + "15" }}>{role}</span>
       </div>
 
-      {/* Task + hours mini stats */}
       <div className="grid grid-cols-3 gap-1.5 mb-3">
         <div className="bg-gray-50 rounded-xl p-2 text-center border border-gray-100">
           <p className="text-[9px] text-gray-400 font-medium mb-0.5">Tasks</p>
@@ -1114,7 +881,6 @@ function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceM
         </div>
       </div>
 
-      {/* Production hours today */}
       {prodHours && (
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100 mb-3">
           <span className="text-[10px] text-indigo-400 font-medium flex items-center gap-1"><Clock size={10}/>Today's Hours</span>
@@ -1122,7 +888,6 @@ function EmployeeCard({ emp, index, onViewDetails, onEdit, onDelete, attendanceM
         </div>
       )}
 
-      {/* Productivity bar */}
       <div className="mb-3">
         <div className="flex justify-between text-[10px] mb-1">
           <span className="text-gray-400 font-medium">Productivity</span>
@@ -1168,12 +933,11 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmp,   setEditingEmp]   = useState(null);
   const [deletingEmp,  setDeletingEmp]  = useState(null);
-  const [detailEmp,    setDetailEmp]    = useState(null);
 
   // Global data: projects, tasks, attendance
   const [allProjects,   setAllProjects]   = useState([]);
   const [allTasks,      setAllTasks]      = useState([]);
-  const [attendanceMap, setAttendanceMap] = useState({}); // keyed by employee.id
+  const [attendanceMap, setAttendanceMap] = useState({});
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1222,13 +986,9 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
 
   const total      = employees.length;
   const active     = employees.filter(e => e.status === "active" || e.status === 1).length;
-  const inactive   = total - active;
   const ago30      = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const newJoiners = employees.filter(e => { const d = e.joining_date || e.created_at; return d && new Date(d) >= ago30; }).length;
-
-  // Attendance summary
   const presentToday = Object.values(attendanceMap).filter(a => a.status === "Present" || a.status === "Late").length;
-  const absentToday  = total - presentToday;
 
   const stats = [
     { label: "Total Employees", value: total,        Icon: Users,      bg: "bg-slate-800",   text: "text-slate-100" },
@@ -1236,6 +996,11 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
     { label: "Present Today",   value: presentToday, Icon: Target,     bg: "bg-blue-500",    text: "text-white" },
     { label: "New Joiners",     value: newJoiners,   Icon: UserPlus,   bg: "bg-orange-500",  text: "text-white" },
   ];
+
+  // ⭐ MAIN CHANGE: navigate to details page instead of opening drawer
+  const handleViewDetails = (emp) => {
+    onViewDetails?.(emp);
+  };
 
   return (
     <div>
@@ -1275,7 +1040,6 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 mb-4">
           <span className="flex items-center gap-2"><AlertTriangle size={15}/>{error}</span>
@@ -1301,7 +1065,7 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
                 index={i}
                 allTasks={allTasks}
                 attendanceMap={attendanceMap}
-                onViewDetails={(e) => setDetailEmp(e)}
+                onViewDetails={handleViewDetails}
                 onEdit={() => setEditingEmp(emp)}
                 onDelete={() => setDeletingEmp(emp)}
               />
@@ -1331,15 +1095,7 @@ export default function EmployeeList({ onViewDetails, onNavigateToDeptDesig }) {
           onSuccess={() => { setDeletingEmp(null); fetchEmployees(); }}
         />
       )}
-      {detailEmp && (
-        <EmployeeDetailDrawer
-          emp={detailEmp}
-          onClose={() => setDetailEmp(null)}
-          allProjects={allProjects}
-          allTasks={allTasks}
-          attendanceMap={attendanceMap}
-        />
-      )}
+      {/* ⭐ REMOVED: EmployeeDetailDrawer — now navigates to detail page instead */}
     </div>
   );
 }

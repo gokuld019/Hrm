@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X, Plus, Trash2, ChevronDown, AlertTriangle, Loader2,
   CheckCircle2, Users, Calendar, Search, Check, FileText,
@@ -7,7 +7,8 @@ import {
   ChevronLeft, ChevronRight, Clock, ThumbsUp, ThumbsDown, Bell,
   Briefcase, Star, Filter, RotateCcw, MessageSquare, Layers,
   Building2, Zap, ClipboardList, Sparkles, Palmtree, Stethoscope,
-  Coffee, Baby, Heart, Frown, Landmark,
+  Coffee, Baby, Heart, Frown, Landmark, UserPlus, CalendarDays,
+  ArrowRight, Award, TrendingUp, Target
 } from "lucide-react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -26,13 +27,12 @@ const LEAVE_TYPE_PRESETS = [
   { name:"Public Holiday",    Icon:Landmark,     color:"#22c55e", bg:"#f0fdf4" },
   { name:"Extra Leave",       Icon:Star,         color:"#6366f1", bg:"#eef2ff" },
 ];
-
 const getPreset = (name) => LEAVE_TYPE_PRESETS.find(p => p.name === name) || LEAVE_TYPE_PRESETS[0];
 
 const AVATAR_COLORS = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
 const CARDS_PER_PAGE = 6;
 
-// ─── AUTH HELPER ─────────────────────────────────────────────────────────────
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
 const getAuthHeaders = () => {
   const token = typeof window !== "undefined" ? localStorage.getItem("admin_auth_token") : null;
   return {
@@ -43,7 +43,7 @@ const getAuthHeaders = () => {
   };
 };
 
-// ─── EMPLOYEE HELPERS ─────────────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 const getInitials = (name = "") => name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "??";
 const getFullName = (emp) => {
   if (!emp) return "Unknown";
@@ -52,12 +52,10 @@ const getFullName = (emp) => {
 };
 const getRole = (emp) => emp?.designation?.name || emp?.designation || emp?.role || "Employee";
 
-// ─── STYLE HELPERS ────────────────────────────────────────────────────────────
 const inputBase  = "w-full text-sm border rounded-lg px-3 py-2 outline-none focus:ring-2 transition text-gray-800 bg-white placeholder:text-gray-400";
 const neutral    = "border-gray-200 focus:border-orange-400 focus:ring-orange-100";
 const selectBase = "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 appearance-none bg-white transition text-gray-700 disabled:opacity-60";
 
-// ─── FORMAT DATE ──────────────────────────────────────────────────────────────
 function fmtDate(dateStr) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -69,7 +67,7 @@ function fmtDateTime(dateStr) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── PAGINATION
+// PAGINATION
 // ════════════════════════════════════════════════════════════════════
 function Pagination({ total, page, perPage, onChange }) {
   const totalPages = Math.ceil(total / perPage);
@@ -103,7 +101,7 @@ function Pagination({ total, page, perPage, onChange }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── NOTIFICATION MODAL
+// NOTIFICATION MODAL
 // ════════════════════════════════════════════════════════════════════
 function NotificationModal({ type, title, message, onClose }) {
   const config = {
@@ -131,7 +129,7 @@ function NotificationModal({ type, title, message, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── CONFIRM MODAL
+// CONFIRM MODAL
 // ════════════════════════════════════════════════════════════════════
 function ConfirmModal({ title, message, onConfirm, onCancel, loading }) {
   return (
@@ -153,7 +151,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, loading }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── REJECT REMARKS MODAL
+// REJECT REMARKS MODAL
 // ════════════════════════════════════════════════════════════════════
 function RejectModal({ request, onConfirm, onCancel, loading }) {
   const [remarks, setRemarks] = useState("");
@@ -161,18 +159,18 @@ function RejectModal({ request, onConfirm, onCancel, loading }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel}/>
       <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white border border-gray-200 shadow-2xl z-10 overflow-hidden animate-[modalPop_0.28s_cubic-bezier(.34,1.3,.64,1)]">
-        <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 flex items-center justify-between">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 bg-red-50">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-              <XCircle size={16} className="text-white"/>
+            <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center">
+              <XCircle size={16} className="text-red-500"/>
             </div>
             <div>
-              <p className="text-sm font-black text-white">Reject Leave Request</p>
-              <p className="text-[10px] text-red-100">{request?.employee_name} · {request?.leave_type_name}</p>
+              <p className="text-sm font-black text-gray-900">Reject Leave Request</p>
+              <p className="text-[10px] text-gray-500">{request?.employee_name} · {request?.leave_type_name}</p>
             </div>
           </div>
-          <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition">
-            <X size={13} className="text-white"/>
+          <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 transition">
+            <X size={13} className="text-gray-500"/>
           </button>
         </div>
         <div className="p-5">
@@ -191,7 +189,7 @@ function RejectModal({ request, onConfirm, onCancel, loading }) {
               Cancel
             </button>
             <button onClick={() => onConfirm(remarks)} disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-black text-white bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-xl transition disabled:opacity-60 shadow-sm shadow-red-200">
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-black text-white bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-60">
               {loading ? <><Loader2 size={13} className="animate-spin"/>Rejecting…</> : <><ThumbsDown size={13}/>Reject Leave</>}
             </button>
           </div>
@@ -202,13 +200,13 @@ function RejectModal({ request, onConfirm, onCancel, loading }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── MODAL SHELL
+// MODAL SHELL
 // ════════════════════════════════════════════════════════════════════
-function ModalShell({ title, onClose, children, footer, tabs, activeTab, onTabChange }) {
+function ModalShell({ title, onClose, children, footer, tabs, activeTab, onTabChange, wide }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}/>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 z-10 flex flex-col max-h-[90vh]">
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${wide ? "max-w-3xl" : "max-w-2xl"} mx-4 z-10 flex flex-col max-h-[90vh]`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="text-base font-black text-gray-900">{title}</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition"><X size={15}/></button>
@@ -231,7 +229,7 @@ function ModalShell({ title, onClose, children, footer, tabs, activeTab, onTabCh
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── useDeptDesig hook
+// useDeptDesig
 // ════════════════════════════════════════════════════════════════════
 function useDeptDesig() {
   const [departments, setDepts]     = useState([]);
@@ -247,7 +245,7 @@ function useDeptDesig() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── LEAVE TYPE ROW
+// LEAVE TYPE ROW
 // ════════════════════════════════════════════════════════════════════
 function LeaveTypeRow({ row, index, onChange, onRemove }) {
   const preset = getPreset(row.name);
@@ -274,7 +272,7 @@ function LeaveTypeRow({ row, index, onChange, onRemove }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── CREATE / EDIT POLICY MODAL
+// CREATE / EDIT POLICY MODAL
 // ════════════════════════════════════════════════════════════════════
 function CreateLeavePolicyModal({ onClose, onSuccess, editPolicy }) {
   const isEdit = !!editPolicy;
@@ -358,7 +356,7 @@ function CreateLeavePolicyModal({ onClose, onSuccess, editPolicy }) {
             </div>)}
           </div>)}
         </div>
-        <div className="p-3 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-xl text-xs space-y-1">
+        <div className="p-3 bg-orange-50 border border-orange-100 rounded-xl text-xs space-y-1">
           <p className="font-black text-gray-700 mb-1 flex items-center gap-1.5"><ClipboardList size={12} className="text-orange-500"/>Summary</p>
           <p className="text-gray-600">Name: <span className="text-gray-900 font-bold">{form.policy_name||"—"}</span></p>
           <p className="text-gray-600">Year: <span className="text-gray-900 font-bold">{form.year}</span> · Months: <span className="text-gray-900 font-bold">{form.month_type==="all" ? "All 12" : form.months.map(m => MONTH_SHORT[m-1]).join(",") || "—"}</span></p>
@@ -371,7 +369,7 @@ function CreateLeavePolicyModal({ onClose, onSuccess, editPolicy }) {
         </div>
         <div className="space-y-2">{leaveTypes.map((row,idx) => <LeaveTypeRow key={idx} row={row} index={idx} onChange={handleLeaveChange} onRemove={removeLeaveType}/>)}</div>
         <button onClick={addLeaveType} className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-orange-500 border-2 border-dashed border-orange-200 rounded-xl hover:bg-orange-50 transition"><Plus size={13}/>Add Leave Type</button>
-        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl">
+        <div className="flex items-center justify-between p-3 bg-orange-500 rounded-xl">
           <span className="text-xs font-bold text-white">Total Leave Days</span>
           <span className="text-xl font-black text-white">{totalDays} days/yr</span>
         </div>
@@ -381,22 +379,18 @@ function CreateLeavePolicyModal({ onClose, onSuccess, editPolicy }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── ASSIGN LEAVE MODAL — with Bulk Assign tab
+// ASSIGN LEAVE MODAL
 // ════════════════════════════════════════════════════════════════════
 function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
   const isEdit = !!editAssignment;
   const currentYear = new Date().getFullYear();
 
-  // Mode: "single" (existing flow) or "bulk" (new bulk-from-policy flow)
   const [mode, setMode] = useState("single");
-
-  // ── Single assign state ──
   const [employees, setEmployees] = useState([]); const [loadingEmps, setLoadingEmps] = useState(true); const [empError, setEmpError] = useState(null);
   const [search, setSearch] = useState(""); const [selectedEmp, setSelectedEmp] = useState(editAssignment?.employee || null);
   const [policies, setPolicies] = useState([]); const [loadingPol, setLoadingPol] = useState(false); const [selectedPol, setSelectedPol] = useState(null);
   const [leaveOverride, setLeaveOverride] = useState({}); const [saving, setSaving] = useState(false); const [activeTab, setActiveTab] = useState("employee");
 
-  // ── Bulk assign state ──
   const [bulkPolicies, setBulkPolicies]     = useState([]);
   const [loadingBulkPol, setLoadingBulkPol] = useState(false);
   const [bulkPolicyId, setBulkPolicyId]     = useState("");
@@ -404,7 +398,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
   const [bulkSaving, setBulkSaving]         = useState(false);
   const [bulkSearch, setBulkSearch]         = useState("");
 
-  // ── Load employees (single mode) ──
   useEffect(() => {
     if (mode !== "single") return;
     if (employees.length > 0) return;
@@ -416,7 +409,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
       .finally(() => setLoadingEmps(false));
   }, [mode]);
 
-  // ── Load policies for single mode ──
   useEffect(() => {
     if (!selectedEmp) return; setLoadingPol(true); setSelectedPol(null); setLeaveOverride({});
     fetch(`${BASE}/api/admin/leave-policies`, { headers: getAuthHeaders() })
@@ -433,7 +425,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
       .finally(() => setLoadingPol(false));
   }, [selectedEmp]);
 
-  // ── Load policies for bulk mode ──
   useEffect(() => {
     if (mode !== "bulk") return;
     if (bulkPolicies.length > 0) return;
@@ -459,7 +450,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
   const isValid = () => selectedEmp && selectedPol && Object.keys(leaveOverride).length > 0;
   const totalAssigned = Object.values(leaveOverride).reduce((s,v) => s + Number(v.days_assigned||0), 0);
 
-  // ── Single save ──
   const handleSave = async () => {
     if (!isValid()) return; setSaving(true);
     try {
@@ -471,7 +461,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
     } catch (err) { onSuccess?.(null, err.message||"Failed to assign."); } finally { setSaving(false); }
   };
 
-  // ── Bulk save ──
   const isBulkValid = () => bulkPolicyId && bulkYear;
   const handleBulkSave = async () => {
     if (!isBulkValid()) return;
@@ -494,7 +483,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
     }
   };
 
-  // ── Tabs change based on mode ──
   const TABS = mode === "single"
     ? [
         { id: "mode",     label: "Choose Mode",    icon: Layers   },
@@ -506,58 +494,39 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
         { id: "bulk", label: "Bulk Assign",    icon: Zap      },
       ];
 
-  // Filter bulk policies by search
-  const filteredBulkPolicies = bulkPolicies.filter(p => {
-    const q = bulkSearch.toLowerCase();
-    return (p.policy_name||"").toLowerCase().includes(q);
-  });
+  const filteredBulkPolicies = bulkPolicies.filter(p => (p.policy_name||"").toLowerCase().includes(bulkSearch.toLowerCase()));
   const selectedBulkPolicy = bulkPolicies.find(p => String(p.id) === String(bulkPolicyId));
 
-  // Footer based on activeTab
   const renderFooter = () => {
-    if (activeTab === "mode") {
-      return (
-        <>
-          <button onClick={onClose} className="px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition">Cancel</button>
-          <button
-            onClick={() => setActiveTab(mode === "single" ? "employee" : "bulk")}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition">
-            Continue <ChevronRight size={14}/>
-          </button>
-        </>
-      );
-    }
-    if (activeTab === "employee") {
-      return (
-        <>
-          <button onClick={() => setActiveTab("mode")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
-          <button onClick={() => setActiveTab("leave")} disabled={!selectedEmp} className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50">
-            Next <ChevronRight size={14}/>
-          </button>
-        </>
-      );
-    }
-    if (activeTab === "leave") {
-      return (
-        <>
-          <button onClick={() => setActiveTab("employee")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
-          <button onClick={handleSave} disabled={saving||!isValid()} className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50">
-            {saving ? <><Loader2 size={14} className="animate-spin"/>{isEdit ? "Updating…" : "Assigning…"}</> : <><UserCheck size={14}/>{isEdit ? "Update" : "Assign Leave"}</>}
-          </button>
-        </>
-      );
-    }
-    if (activeTab === "bulk") {
-      return (
-        <>
-          <button onClick={() => setActiveTab("mode")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
-          <button onClick={handleBulkSave} disabled={bulkSaving || !isBulkValid()}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 rounded-xl transition disabled:opacity-50 shadow-sm shadow-violet-200">
-            {bulkSaving ? <><Loader2 size={14} className="animate-spin"/>Bulk Assigning…</> : <><Zap size={14}/>Bulk Assign Leave</>}
-          </button>
-        </>
-      );
-    }
+    if (activeTab === "mode") return (
+      <>
+        <button onClick={onClose} className="px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition">Cancel</button>
+        <button onClick={() => setActiveTab(mode === "single" ? "employee" : "bulk")} className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition">Continue <ChevronRight size={14}/></button>
+      </>
+    );
+    if (activeTab === "employee") return (
+      <>
+        <button onClick={() => setActiveTab("mode")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
+        <button onClick={() => setActiveTab("leave")} disabled={!selectedEmp} className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50">Next <ChevronRight size={14}/></button>
+      </>
+    );
+    if (activeTab === "leave") return (
+      <>
+        <button onClick={() => setActiveTab("employee")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
+        <button onClick={handleSave} disabled={saving||!isValid()} className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50">
+          {saving ? <><Loader2 size={14} className="animate-spin"/>{isEdit ? "Updating…" : "Assigning…"}</> : <><UserCheck size={14}/>{isEdit ? "Update" : "Assign Leave"}</>}
+        </button>
+      </>
+    );
+    if (activeTab === "bulk") return (
+      <>
+        <button onClick={() => setActiveTab("mode")} className="flex items-center gap-1 px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition"><ChevronLeft size={14}/>Back</button>
+        <button onClick={handleBulkSave} disabled={bulkSaving || !isBulkValid()}
+          className="flex items-center gap-2 px-5 py-2 text-sm font-black text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition disabled:opacity-50">
+          {bulkSaving ? <><Loader2 size={14} className="animate-spin"/>Bulk Assigning…</> : <><Zap size={14}/>Bulk Assign Leave</>}
+        </button>
+      </>
+    );
   };
 
   return (
@@ -566,11 +535,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
       onClose={onClose}
       tabs={isEdit ? null : TABS}
       activeTab={activeTab}
-      onTabChange={(tabId) => {
-        // Don't allow jumping past mode if still on mode tab without selection
-        if (isEdit) return;
-        setActiveTab(tabId);
-      }}
+      onTabChange={(tabId) => { if (isEdit) return; setActiveTab(tabId); }}
       footer={isEdit ? (
         <>
           <button onClick={onClose} className="px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition">Cancel</button>
@@ -580,7 +545,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
         </>
       ) : renderFooter()}>
 
-      {/* ─── Mode selector tab ─── */}
       {!isEdit && activeTab === "mode" && (
         <>
           <div className="text-center mb-2">
@@ -588,46 +552,32 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
             <p className="text-xs text-gray-500">Pick one of the options below to get started</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {/* Single mode card */}
-            <button
-              onClick={() => { setMode("single"); }}
+            <button onClick={() => setMode("single")}
               className={`text-left p-5 rounded-2xl border-2 transition-all hover:-translate-y-0.5 ${mode === "single" ? "border-orange-400 bg-orange-50 shadow-lg shadow-orange-100" : "border-gray-200 bg-white hover:border-orange-200"}`}>
               <div className="flex items-start justify-between mb-3">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm ${mode==="single" ? "bg-gradient-to-br from-orange-400 to-amber-500" : "bg-gray-100"}`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm ${mode==="single" ? "bg-orange-500" : "bg-gray-100"}`}>
                   <UserCheck size={20} className={mode==="single" ? "text-white" : "text-gray-400"}/>
                 </div>
-                {mode === "single" && (
-                  <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center">
-                    <Check size={13} className="text-white"/>
-                  </div>
-                )}
+                {mode === "single" && <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center"><Check size={13} className="text-white"/></div>}
               </div>
               <p className="text-sm font-black text-gray-900 mb-1">Single Employee</p>
-              <p className="text-[11px] text-gray-500 leading-relaxed">Assign a leave policy to one specific employee. Customize allocations per leave type.</p>
+              <p className="text-[11px] text-gray-500 leading-relaxed">Assign a leave policy to one specific employee.</p>
             </button>
-
-            {/* Bulk mode card */}
-            <button
-              onClick={() => { setMode("bulk"); }}
+            <button onClick={() => setMode("bulk")}
               className={`text-left p-5 rounded-2xl border-2 transition-all hover:-translate-y-0.5 ${mode === "bulk" ? "border-violet-400 bg-violet-50 shadow-lg shadow-violet-100" : "border-gray-200 bg-white hover:border-violet-200"}`}>
               <div className="flex items-start justify-between mb-3">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm ${mode==="bulk" ? "bg-gradient-to-br from-violet-500 to-purple-600" : "bg-gray-100"}`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm ${mode==="bulk" ? "bg-violet-600" : "bg-gray-100"}`}>
                   <Zap size={20} className={mode==="bulk" ? "text-white" : "text-gray-400"}/>
                 </div>
-                {mode === "bulk" && (
-                  <div className="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center">
-                    <Check size={13} className="text-white"/>
-                  </div>
-                )}
+                {mode === "bulk" && <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center"><Check size={13} className="text-white"/></div>}
               </div>
               <p className="text-sm font-black text-gray-900 mb-1 flex items-center gap-1.5">
                 Bulk Assign
                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200">FAST</span>
               </p>
-              <p className="text-[11px] text-gray-500 leading-relaxed">Auto-assign a policy to all eligible employees in one click based on policy scope.</p>
+              <p className="text-[11px] text-gray-500 leading-relaxed">Auto-assign to all eligible employees.</p>
             </button>
           </div>
-
           <div className="flex items-start gap-2.5 p-3 bg-blue-50 border border-blue-100 rounded-xl">
             <Info size={14} className="text-blue-500 shrink-0 mt-0.5"/>
             <div className="text-[11px] text-blue-700 leading-relaxed">
@@ -637,7 +587,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
         </>
       )}
 
-      {/* ─── Single mode: Employee tab ─── */}
       {!isEdit && activeTab === "employee" && (
         <>
           <div className="relative"><Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, ID, role…" className={`${inputBase} ${neutral} pl-9`}/></div>
@@ -662,7 +611,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
         </>
       )}
 
-      {/* ─── Single mode: Leave tab ─── */}
       {(activeTab === "leave" || (isEdit && activeTab !== "bulk")) && (
         <>
           {selectedEmp && (<div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
@@ -693,7 +641,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
                 <input type="number" min="0" max="365" value={ov.days_assigned} onChange={e => handleOverrideChange(lt.name,"days_assigned",e.target.value)} className={`${inputBase} ${neutral} text-xs py-1.5 text-center`}/>
               </div>); })}
             </div>
-            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl mt-3">
+            <div className="flex items-center justify-between p-3 bg-orange-500 rounded-xl mt-3">
               <span className="text-xs font-bold text-white">Total for {getFullName(selectedEmp)}</span>
               <span className="text-xl font-black text-white">{totalAssigned}d/yr</span>
             </div>
@@ -701,11 +649,9 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
         </>
       )}
 
-      {/* ─── Bulk mode tab ─── */}
       {!isEdit && activeTab === "bulk" && (
         <>
-          {/* Bulk header banner */}
-          <div className="flex items-start gap-3 p-4 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl shadow-md shadow-violet-200">
+          <div className="flex items-start gap-3 p-4 bg-violet-600 rounded-2xl">
             <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-sm">
               <Zap size={20} className="text-white"/>
             </div>
@@ -720,7 +666,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
             </div>
           </div>
 
-          {/* Year selector */}
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
               <Calendar size={12} className="text-violet-500"/>
@@ -730,9 +675,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
               {[currentYear-1, currentYear, currentYear+1, currentYear+2].map(y => {
                 const sel = String(bulkYear) === String(y);
                 return (
-                  <button
-                    key={y}
-                    onClick={() => setBulkYear(String(y))}
+                  <button key={y} onClick={() => setBulkYear(String(y))}
                     className={`py-2.5 text-xs font-black rounded-xl border-2 transition-all ${sel ? "border-violet-400 bg-violet-50 text-violet-600 shadow-sm shadow-violet-100" : "border-gray-200 text-gray-500 hover:border-violet-200"}`}>
                     {y}
                   </button>
@@ -741,7 +684,6 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
             </div>
           </div>
 
-          {/* Policy search + selector */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
@@ -758,12 +700,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
             {bulkPolicies.length > 4 && (
               <div className="relative mb-2">
                 <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-                <input
-                  value={bulkSearch}
-                  onChange={e => setBulkSearch(e.target.value)}
-                  placeholder="Search policies…"
-                  className={`${inputBase} ${neutral} pl-8 text-xs py-2`}
-                />
+                <input value={bulkSearch} onChange={e => setBulkSearch(e.target.value)} placeholder="Search policies…" className={`${inputBase} ${neutral} pl-8 text-xs py-2`}/>
               </div>
             )}
 
@@ -774,8 +711,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
               </div>
             ) : bulkPolicies.length === 0 ? (
               <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-600">
-                <AlertTriangle size={13}/>
-                No policies available. Create a policy first.
+                <AlertTriangle size={13}/>No policies available. Create a policy first.
               </div>
             ) : filteredBulkPolicies.length === 0 ? (
               <div className="flex flex-col items-center py-8 text-gray-400">
@@ -788,35 +724,20 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
                   const isSel = String(bulkPolicyId) === String(pol.id);
                   const scopeLabel = pol.scope === "all" ? "All Departments" : (pol.department_name || `Dept ${pol.department_id}`);
                   return (
-                    <div
-                      key={pol.id}
-                      onClick={() => setBulkPolicyId(String(pol.id))}
+                    <div key={pol.id} onClick={() => setBulkPolicyId(String(pol.id))}
                       className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${isSel ? "border-violet-400 bg-violet-50 shadow-sm shadow-violet-100" : "border-gray-100 hover:border-gray-200 bg-white"}`}>
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isSel ? "bg-gradient-to-br from-violet-500 to-purple-600" : "bg-gray-100"}`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isSel ? "bg-violet-600" : "bg-gray-100"}`}>
                         <FileText size={15} className={isSel ? "text-white" : "text-gray-400"}/>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-0.5">
                           <p className="text-xs font-black text-gray-800 truncate">{pol.policy_name}</p>
-                          {isSel && (
-                            <div className="w-5 h-5 rounded-full bg-violet-500 flex items-center justify-center shrink-0 ml-2">
-                              <Check size={11} className="text-white"/>
-                            </div>
-                          )}
+                          {isSel && <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center shrink-0 ml-2"><Check size={11} className="text-white"/></div>}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500">
-                            <Calendar size={9}/>
-                            {pol.year}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500">
-                            <Building2 size={9}/>
-                            {scopeLabel}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500">
-                            <Layers size={9}/>
-                            {(pol.leave_types||[]).length} types
-                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500"><Calendar size={9}/>{pol.year}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500"><Building2 size={9}/>{scopeLabel}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500"><Layers size={9}/>{(pol.leave_types||[]).length} types</span>
                         </div>
                       </div>
                     </div>
@@ -826,13 +747,11 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
             )}
           </div>
 
-          {/* Selected summary */}
           {selectedBulkPolicy && (
             <div className="rounded-2xl border-2 border-violet-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-50 to-purple-50 px-4 py-3 border-b border-violet-100">
+              <div className="bg-violet-50 px-4 py-3 border-b border-violet-100">
                 <p className="text-[10px] font-black uppercase tracking-wider text-violet-600 flex items-center gap-1.5">
-                  <ClipboardList size={11}/>
-                  Bulk Assignment Summary
+                  <ClipboardList size={11}/>Bulk Assignment Summary
                 </p>
               </div>
               <div className="p-4 bg-white space-y-2.5">
@@ -855,10 +774,7 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
                       const preset = getPreset(lt.name);
                       const PIcon = preset.Icon;
                       return (
-                        <span
-                          key={lt.name}
-                          className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                          style={{backgroundColor:preset.bg, color:preset.color}}>
+                        <span key={lt.name} className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{backgroundColor:preset.bg, color:preset.color}}>
                           <PIcon size={8}/>{lt.days_per_year}d
                         </span>
                       );
@@ -869,16 +785,13 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
                   </div>
                 </div>
               </div>
-              <div className="bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-3 flex items-center gap-2">
+              <div className="bg-violet-600 px-4 py-3 flex items-center gap-2">
                 <Zap size={14} className="text-yellow-200"/>
-                <p className="text-[11px] font-black text-white">
-                  Ready to assign to all eligible employees
-                </p>
+                <p className="text-[11px] font-black text-white">Ready to assign to all eligible employees</p>
               </div>
             </div>
           )}
 
-          {/* Warning */}
           <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl">
             <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5"/>
             <div className="text-[11px] text-amber-700 leading-relaxed">
@@ -892,12 +805,12 @@ function AssignLeaveModal({ onClose, onSuccess, editAssignment }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── VIEW POLICY MODAL
+// VIEW POLICY MODAL
 // ════════════════════════════════════════════════════════════════════
 function ViewPolicyModal({ policy, onClose }) {
   return (
     <ModalShell title="Policy Details" onClose={onClose}>
-      <div className="flex items-start gap-3 p-4 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-xl">
+      <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-100 rounded-xl">
         <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0"><FileText size={18} className="text-orange-500"/></div>
         <div><p className="text-sm font-black text-gray-900">{policy.policy_name}</p><p className="text-xs text-gray-500 mt-0.5">{policy.year} · {policy.month_type==="all" ? "All months" : (policy.months||[]).map(m => MONTH_SHORT[m-1]).join(", ")}</p><p className="text-xs text-gray-500">Scope: {policy.scope==="all" ? "All Departments" : policy.department_name||`Dept ${policy.department_id}`}</p></div>
       </div>
@@ -923,16 +836,64 @@ function ViewPolicyModal({ policy, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── POLICIES SECTION
+// POLICY CARD
+// ════════════════════════════════════════════════════════════════════
+function PolicyCard({ pol, onEdit, onDelete, onView }) {
+  const totalDays = (pol.leave_types||[]).reduce((s, lt) => s + Number(lt.days_per_year||0), 0);
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+      {/* Top accent */}
+      <div className="h-1 bg-orange-500" />
+
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center shrink-0">
+            <FileText size={17} className="text-orange-500"/>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">Active</span>
+            <button onClick={() => onView(pol)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"><Eye size={12}/></button>
+            <button onClick={() => onEdit(pol)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"><Edit2 size={12}/></button>
+            <button onClick={() => onDelete(pol)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 size={12}/></button>
+          </div>
+        </div>
+
+        <p className="text-sm font-black text-gray-900 mb-0.5 truncate">{pol.policy_name}</p>
+        <p className="text-[10px] text-gray-400 mb-3">{pol.year} · {pol.month_type==="all" ? "All months" : (pol.months||[]).map(m => MONTH_SHORT[m-1]).join(", ")}</p>
+
+        <div className="flex flex-wrap gap-1 mb-3">
+          {(pol.leave_types||[]).slice(0, 3).map(lt => {
+            const preset = getPreset(lt.name);
+            const PIcon = preset.Icon;
+            return (
+              <span key={lt.name} className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{backgroundColor:preset.bg, color:preset.color}}>
+                <PIcon size={8}/>{lt.name.split(" ")[0]}: {lt.days_per_year}d
+              </span>
+            );
+          })}
+          {(pol.leave_types||[]).length > 3 && <span className="text-[9px] font-bold text-gray-400">+{(pol.leave_types||[]).length-3} more</span>}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <span className="text-[10px] text-gray-500 flex items-center gap-1"><Building2 size={10}/>{pol.scope==="all" ? "All Departments" : pol.department_name||`Dept ${pol.department_id}`}</span>
+          <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">{totalDays}d/yr</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// POLICIES SECTION
 // ════════════════════════════════════════════════════════════════════
 function PoliciesSection({ policies, loading, onEdit, onDelete, onView }) {
   const [page, setPage] = useState(1);
   const paginated = policies.slice((page-1)*CARDS_PER_PAGE, page*CARDS_PER_PAGE);
 
   if (loading) return (
-    <div className="grid grid-cols-2 gap-4">{Array.from({length:4}).map((_,i) => (
+    <div className="grid grid-cols-3 gap-4">{Array.from({length:6}).map((_,i) => (
       <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 animate-pulse">
-        <div className="h-4 w-32 bg-gray-200 rounded mb-3"/><div className="h-3 w-24 bg-gray-100 rounded mb-2"/><div className="h-3 w-20 bg-gray-100 rounded"/>
+        <div className="h-10 w-10 bg-gray-200 rounded-xl mb-3"/><div className="h-4 w-32 bg-gray-200 rounded mb-2"/><div className="h-3 w-24 bg-gray-100 rounded mb-2"/><div className="h-3 w-20 bg-gray-100 rounded"/>
       </div>
     ))}</div>
   );
@@ -945,39 +906,20 @@ function PoliciesSection({ policies, loading, onEdit, onDelete, onView }) {
     </div>
   );
 
-  return (<>
-    <div className="grid grid-cols-2 gap-4">
-      {paginated.map(pol => (
-        <div key={pol.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center shrink-0 shadow-sm shadow-orange-200"><FileText size={15} className="text-white"/></div>
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">Active</span>
-              <button onClick={() => onView(pol)} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 text-gray-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"><Eye size={11}/></button>
-              <button onClick={() => onEdit(pol)} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 text-gray-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"><Edit2 size={11}/></button>
-              <button onClick={() => onDelete(pol)} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 text-gray-300 hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 size={11}/></button>
-            </div>
-          </div>
-          <p className="text-sm font-black text-gray-900 mb-0.5 truncate">{pol.policy_name}</p>
-          <p className="text-[10px] text-gray-400 mb-3">{pol.year} · {pol.month_type==="all" ? "All months" : (pol.months||[]).map(m => MONTH_SHORT[m-1]).join(", ")}</p>
-          <div className="flex flex-wrap gap-1 mb-2">
-            {(pol.leave_types||[]).slice(0,3).map(lt => { const preset = getPreset(lt.name); const PIcon = preset.Icon; return (
-              <span key={lt.name} className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{backgroundColor:preset.bg, color:preset.color}}>
-                <PIcon size={8}/>{lt.name.split(" ")[0]}: {lt.days_per_year}d
-              </span>
-            ); })}
-            {(pol.leave_types||[]).length>3 && <span className="text-[9px] text-gray-400">+{(pol.leave_types||[]).length-3} more</span>}
-          </div>
-          <p className="text-[10px] text-gray-400 flex items-center gap-1"><Building2 size={9}/>{pol.scope==="all" ? "All Departments" : pol.department_name||`Dept ${pol.department_id}`}</p>
-        </div>
-      ))}
-    </div>
-    <Pagination total={policies.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
-  </>);
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-4">
+        {paginated.map(pol => (
+          <PolicyCard key={pol.id} pol={pol} onEdit={onEdit} onDelete={onDelete} onView={onView} />
+        ))}
+      </div>
+      <Pagination total={policies.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
+    </>
+  );
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── ASSIGNED LEAVE SECTION
+// ASSIGNED LEAVE SECTION — GROUPED BY POLICY
 // ════════════════════════════════════════════════════════════════════
 function AssignedLeaveSection({ onEdit, onDelete, refreshKey }) {
   const [assignments, setAssignments] = useState([]);
@@ -985,85 +927,404 @@ function AssignedLeaveSection({ onEdit, onDelete, refreshKey }) {
   const [error, setError]             = useState(null);
   const [searchQ, setSearchQ]         = useState("");
   const [page, setPage]               = useState(1);
+  const [openGroup, setOpenGroup]     = useState(null); // policy id whose group modal is open
 
   const fetchAssignments = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const res = await fetch(`${BASE}/api/admin/leave-assignments`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json(); setAssignments(Array.isArray(data) ? data : (data?.data??[]));
-    } catch (err) { setError(err.message||"Failed to load assignments."); } finally { setLoading(false); }
+      const data = await res.json();
+      setAssignments(Array.isArray(data) ? data : (data?.data ?? []));
+    } catch (err) { setError(err.message||"Failed to load assignments."); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments, refreshKey]);
 
-  const filtered  = assignments.filter(a => { const q = searchQ.toLowerCase(); const emp = getFullName(a.employee||a); return emp.toLowerCase().includes(q) || (a.policy_name||"").toLowerCase().includes(q); });
-  const paginated = filtered.slice((page-1)*CARDS_PER_PAGE, page*CARDS_PER_PAGE);
+  // ── Group by policy_id + year ──────────────────────────────────────
+  const grouped = useMemo(() => {
+    const map = new Map();
+    assignments.forEach(a => {
+      const key = `${a.policy_id}__${a.year || ""}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          policy_id: a.policy_id,
+          policy_name: a.policy_name || `Policy #${a.policy_id}`,
+          year: a.year,
+          employees: [],
+        });
+      }
+      map.get(key).employees.push(a);
+    });
+    // Sort employees within each group
+    map.forEach(g => g.employees.sort((x, y) => getFullName(x.employee || x).localeCompare(getFullName(y.employee || y))));
+    return Array.from(map.values());
+  }, [assignments]);
+
+  // Search filtering
+  const filteredGroups = useMemo(() => {
+    if (!searchQ.trim()) return grouped;
+    const q = searchQ.toLowerCase();
+    return grouped
+      .map(g => {
+        const groupMatches = g.policy_name.toLowerCase().includes(q);
+        const matchingEmployees = g.employees.filter(a => {
+          const emp = a.employee || a;
+          return getFullName(emp).toLowerCase().includes(q) ||
+                 (emp.employee_id || "").toLowerCase().includes(q) ||
+                 getRole(emp).toLowerCase().includes(q);
+        });
+        if (groupMatches) return g; // if group matches, show all
+        if (matchingEmployees.length > 0) return { ...g, employees: matchingEmployees };
+        return null;
+      })
+      .filter(Boolean);
+  }, [grouped, searchQ]);
+
+  const paginatedGroups = filteredGroups.slice((page-1)*CARDS_PER_PAGE, page*CARDS_PER_PAGE);
 
   return (
     <div className="mt-8">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-black text-gray-800">Assigned Leave Details</h3>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center shrink-0">
+            <Users size={15} className="text-orange-500"/>
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-gray-800">Assigned Leave Details</h3>
+            <p className="text-[10px] text-gray-400">
+              {assignments.length} employee{assignments.length !== 1 ? "s" : ""} across {grouped.length} {grouped.length === 1 ? "policy" : "policies"}
+            </p>
+          </div>
           <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">{assignments.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative"><Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/>
-            <input value={searchQ} onChange={e => { setSearchQ(e.target.value); setPage(1); }} placeholder="Search…" className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-orange-400 bg-white text-gray-700 w-36"/>
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input value={searchQ} onChange={e => { setSearchQ(e.target.value); setPage(1); }} placeholder="Search employee, ID, policy…"
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-orange-400 bg-white text-gray-700 w-52"/>
           </div>
-          <button onClick={fetchAssignments} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition"><RefreshCw size={11}/></button>
+          <button onClick={fetchAssignments} className="w-8 h-8 flex items-center justify-center border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition">
+            <RefreshCw size={12}/>
+          </button>
         </div>
       </div>
-      {error && <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 mb-3"><span className="flex items-center gap-2"><AlertTriangle size={13}/>{error}</span><button onClick={fetchAssignments} className="font-black underline flex items-center gap-1"><RefreshCw size={10}/>Retry</button></div>}
-      {loading ? (<div className="grid grid-cols-2 gap-4">{Array.from({length:4}).map((_,i) => <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 animate-pulse"><div className="flex gap-3 mb-3"><div className="w-10 h-10 rounded-full bg-gray-200"/><div className="flex-1"><div className="h-3 w-28 bg-gray-200 rounded mb-1.5"/><div className="h-2.5 w-20 bg-gray-100 rounded"/></div></div><div className="h-3 w-36 bg-gray-100 rounded mb-2"/><div className="h-3 w-24 bg-gray-100 rounded"/></div>)}</div>)
-        : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">
-            <UserCheck size={36} strokeWidth={1} className="mb-2 text-gray-200"/>
-            <p className="text-sm font-bold">{searchQ ? "No matching assignments." : "No leave assignments yet."}</p>
-            <p className="text-xs mt-1 text-gray-300">Use "Assign Leave" to get started.</p>
-          </div>
-        ) : (<>
+
+      {error && (
+        <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 mb-3">
+          <span className="flex items-center gap-2"><AlertTriangle size={13}/>{error}</span>
+          <button onClick={fetchAssignments} className="font-black underline flex items-center gap-1"><RefreshCw size={10}/>Retry</button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({length:4}).map((_,i) => (
+            <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 animate-pulse">
+              <div className="flex gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gray-200"/>
+                <div className="flex-1 space-y-2"><div className="h-4 w-40 bg-gray-200 rounded"/><div className="h-3 w-24 bg-gray-100 rounded"/></div>
+              </div>
+              <div className="h-10 bg-gray-100 rounded-xl"/>
+            </div>
+          ))}
+        </div>
+      ) : filteredGroups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">
+          <UserCheck size={36} strokeWidth={1} className="mb-2 text-gray-200"/>
+          <p className="text-sm font-bold">{searchQ ? "No matching assignments." : "No leave assignments yet."}</p>
+          <p className="text-xs mt-1 text-gray-300">Use "Assign Leave" to get started.</p>
+        </div>
+      ) : (
+        <>
           <div className="grid grid-cols-2 gap-4">
-            {paginated.map(a => {
-              const emp = a.employee||a; const name = getFullName(emp); const initials = getInitials(name);
-              const avatarBg = AVATAR_COLORS[(emp.id||0) % AVATAR_COLORS.length];
-              const allocs = a.leave_allocations||[]; const total = allocs.reduce((s,x) => s+Number(x.days_assigned||0), 0);
+            {paginatedGroups.map(group => (
+              <GroupedCard
+                key={group.key}
+                group={group}
+                onOpen={() => setOpenGroup(group)}
+              />
+            ))}
+          </div>
+          <Pagination total={filteredGroups.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
+        </>
+      )}
+
+      {/* Group Detail Modal */}
+      {openGroup && (
+        <GroupDetailModal
+          group={openGroup}
+          onClose={() => setOpenGroup(null)}
+          onEdit={(assignment) => { setOpenGroup(null); onEdit(assignment); }}
+          onDelete={(assignment) => { setOpenGroup(null); onDelete(assignment); }}
+          onRemoved={fetchAssignments}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Grouped policy card ──────────────────────────────────────────
+function GroupedCard({ group, onOpen }) {
+  const totalEmployees = group.employees.length;
+  const preset = getPreset(group.employees[0]?.leave_allocations?.[0]?.leave_type_name || "Casual Leave");
+  const PIcon = preset.Icon;
+
+  // Aggregate per leave type
+  const typeAgg = {};
+  group.employees.forEach(a => {
+    (a.leave_allocations || []).forEach(la => {
+      const k = la.leave_type_name;
+      if (!typeAgg[k]) typeAgg[k] = { total: 0, count: 0 };
+      typeAgg[k].total += Number(la.days_assigned || 0);
+      typeAgg[k].count += 1;
+    });
+  });
+
+  // Show first 6 avatars
+  const previewEmps = group.employees.slice(0, 6);
+
+  return (
+    <div
+      onClick={onOpen}
+      className="group bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-200 overflow-hidden relative"
+    >
+      <div className="absolute top-0 left-0 right-0 h-1 bg-orange-500" />
+
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0" style={{ backgroundColor: preset.color }}>
+            <PIcon size={20}/>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-black text-gray-900 truncate">{group.policy_name}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Year {group.year || "—"} · {totalEmployees} employee{totalEmployees !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+        <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition shrink-0">
+          <ArrowRight size={14}/>
+        </div>
+      </div>
+
+      {/* Leave type breakdown */}
+      <div className="space-y-1.5 mb-4">
+        {Object.entries(typeAgg).slice(0, 2).map(([name, agg]) => {
+          const p = getPreset(name);
+          const Icon = p.Icon;
+          return (
+            <div key={name} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="flex items-center gap-2 text-[11px] font-bold text-gray-700">
+                <span className="w-5 h-5 rounded-md flex items-center justify-center" style={{ backgroundColor: p.bg, color: p.color }}>
+                  <Icon size={11}/>
+                </span>
+                {name}
+              </span>
+              <span className="text-[11px] font-black text-gray-600">
+                {agg.total / agg.count}d / emp
+              </span>
+            </div>
+          );
+        })}
+        {Object.keys(typeAgg).length > 2 && (
+          <p className="text-[10px] text-gray-400 text-center pt-1">
+            +{Object.keys(typeAgg).length - 2} more leave type{Object.keys(typeAgg).length - 2 !== 1 ? "s" : ""}
+          </p>
+        )}
+      </div>
+
+      {/* Employee avatars */}
+      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+        <div className="flex -space-x-2">
+          {previewEmps.map((a, i) => {
+            const emp = a.employee || a;
+            const name = getFullName(emp);
+            return (
+              <div key={emp.id || i} className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black border-2 border-white shadow-sm"
+                style={{ backgroundColor: AVATAR_COLORS[(emp.id || i) % AVATAR_COLORS.length] }}
+                title={name}>
+                {getInitials(name)}
+              </div>
+            );
+          })}
+          {totalEmployees > 6 && (
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-gray-600 bg-gray-100 border-2 border-white">
+              +{totalEmployees - 6}
+            </div>
+          )}
+        </div>
+        <span className="text-[10px] font-black text-orange-600 flex items-center gap-1">
+          <Eye size={11}/> View all
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Group Detail Modal ───────────────────────────────────────────
+function GroupDetailModal({ group, onClose, onEdit, onDelete }) {
+  const [search, setSearch] = useState("");
+  const [removing, setRemoving] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const preset = getPreset(group.employees[0]?.leave_allocations?.[0]?.leave_type_name || "Casual Leave");
+  const PIcon = preset.Icon;
+
+  const filtered = group.employees.filter(a => {
+    const q = search.toLowerCase();
+    const emp = a.employee || a;
+    return !q || getFullName(emp).toLowerCase().includes(q) || (emp.employee_id || "").toLowerCase().includes(q) || getRole(emp).toLowerCase().includes(q);
+  });
+
+  const handleRemove = async (a) => {
+    if (!confirm(`Remove leave assignment for ${getFullName(a.employee || a)}?`)) return;
+    setRemoving(a.id);
+    try {
+      const res = await fetch(`${BASE}/api/admin/leave-assignments/${a.id}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      setToast({ type: "success", msg: "Assignment removed" });
+      setTimeout(() => { onClose(); window.location.reload(); }, 800);
+    } catch (err) {
+      setToast({ type: "error", msg: err.message });
+    } finally { setRemoving(null); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}/>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 z-10 flex flex-col max-h-[90vh] overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-gray-100 bg-orange-50/50 shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm" style={{ backgroundColor: preset.color }}>
+                <PIcon size={20}/>
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base font-black text-gray-900 truncate">{group.policy_name}</h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-white rounded-full border border-gray-200 text-gray-600">
+                    Year {group.year || "—"}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-orange-100 rounded-full text-orange-700">
+                    {group.employees.length} employee{group.employees.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition shrink-0">
+              <X size={15}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 py-3 border-b border-gray-100 bg-white shrink-0">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search employee by name, ID, or role…"
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition"
+            />
+          </div>
+        </div>
+
+        {/* Employee list */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-gray-400">
+              <Users size={32} strokeWidth={1} className="text-gray-200 mb-2"/>
+              <p className="text-xs font-bold">{search ? "No matching employees" : "No employees in this group"}</p>
+            </div>
+          ) : (
+            filtered.map(a => {
+              const emp = a.employee || a;
+              const name = getFullName(emp);
+              const initials = getInitials(name);
+              const avatarBg = AVATAR_COLORS[(emp.id || 0) % AVATAR_COLORS.length];
+              const allocs = a.leave_allocations || [];
+              const total = allocs.reduce((s, x) => s + Number(x.days_assigned || 0), 0);
+              const isRemoving = removing === a.id;
+
               return (
-                <div key={a.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0" style={{backgroundColor:avatarBg}}>{initials}</div>
-                      <div><p className="text-xs font-black text-gray-900">{name}</p><p className="text-[10px] text-gray-400">{emp.employee_id||""} · {getRole(emp)}</p></div>
+                <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50/30 transition group">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0 shadow-sm" style={{ backgroundColor: avatarBg }}>
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800 truncate">{name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[10px] text-gray-400 font-medium">{emp.employee_id || "—"}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400 font-medium">{getRole(emp)}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => onEdit(a)} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 text-gray-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"><Edit2 size={11}/></button>
-                      <button onClick={() => onDelete(a)} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 text-gray-300 hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 size={11}/></button>
+                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                      {allocs.map(la => {
+                        const p = getPreset(la.leave_type_name);
+                        const Icon = p.Icon;
+                        return (
+                          <span key={la.leave_type_name} className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ backgroundColor: p.bg, color: p.color }}>
+                            <Icon size={8}/>{la.leave_type_name.split(" ")[0]}: {la.days_assigned}d
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 mb-2 p-2 bg-gray-50 border border-gray-100 rounded-lg">
-                    <FileText size={10} className="text-gray-400"/><span className="text-[10px] font-bold text-gray-600 truncate">{a.policy_name||`Policy #${a.policy_id}`}</span>
-                    <span className="ml-auto text-[10px] font-black text-orange-500 shrink-0">{total}d/yr</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {allocs.slice(0,4).map(alloc => { const preset = getPreset(alloc.leave_type_name); const PIcon = preset.Icon; return (
-                      <span key={alloc.leave_type_name} className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{backgroundColor:preset.bg, color:preset.color}}>
-                        <PIcon size={8}/>{alloc.leave_type_name.split(" ")[0]}: {alloc.days_assigned}d
-                      </span>
-                    ); })}
-                    {allocs.length>4 && <span className="text-[9px] text-gray-400">+{allocs.length-4}</span>}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full mr-1">
+                      {total}d
+                    </span>
+                    <button
+                      onClick={() => onEdit(a)}
+                      title="Edit"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition">
+                      <Edit2 size={12}/>
+                    </button>
+                    <button
+                      onClick={() => handleRemove(a)}
+                      disabled={isRemoving}
+                      title="Remove"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50">
+                      {isRemoving ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
+                    </button>
                   </div>
                 </div>
               );
-            })}
-          </div>
-          <Pagination total={filtered.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
-        </>)}
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex items-center justify-between">
+          <p className="text-[11px] text-gray-500 font-medium">
+            Showing <span className="font-black text-gray-800">{filtered.length}</span> of <span className="font-black text-gray-800">{group.employees.length}</span> employee{group.employees.length !== 1 ? "s" : ""}
+          </p>
+          <button onClick={onClose} className="px-5 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition">
+            Close
+          </button>
+        </div>
+      </div>
+
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl text-white font-bold text-xs ${toast.type === "success" ? "bg-emerald-600" : "bg-red-500"}`}>
+          {toast.type === "success" ? <CheckCircle2 size={14}/> : <XCircle size={14}/>}
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── LEAVE APPROVAL SECTION — REAL APIs
+// LEAVE APPROVAL SECTION — Premium Redesign
 // ════════════════════════════════════════════════════════════════════
 function LeaveApprovalSection() {
   const [requests, setRequests]       = useState([]);
@@ -1101,15 +1362,11 @@ function LeaveApprovalSection() {
       });
       let data = {};
       try { data = await res.json(); } catch {}
-      if (!res.ok) {
-        const msg = data?.message || data?.error || `Server error (${res.status})`;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(data?.message || data?.error || `Server error (${res.status})`);
       notify("success", "Approved", data.message || "Leave request has been approved.");
       fetchRequests(filter);
-    } catch (err) {
-      notify("error", "Approval Failed", err.message);
-    } finally { setAL(null); }
+    } catch (err) { notify("error", "Approval Failed", err.message); }
+    finally { setAL(null); }
   };
 
   const handleReject = async (req, remarks) => {
@@ -1122,60 +1379,56 @@ function LeaveApprovalSection() {
       });
       let data = {};
       try { data = await res.json(); } catch {}
-      if (!res.ok) {
-        const msg = data?.message || data?.error || `Server error (${res.status})`;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(data?.message || data?.error || `Server error (${res.status})`);
       setRejectModal(null);
       notify("info", "Leave Rejected", data.message || "Leave request has been rejected.");
       fetchRequests(filter);
-    } catch (err) {
-      notify("error", "Rejection Failed", err.message);
-    } finally { setAL(null); }
+    } catch (err) { notify("error", "Rejection Failed", err.message); }
+    finally { setAL(null); }
   };
 
-  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0, all: 0 });
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   useEffect(() => {
     Promise.all(["pending","approved","rejected"].map(s =>
-      fetch(`${BASE}/api/admin/leave-requests?status=${s}`, { headers: getAuthHeaders() }).then(r => r.json()).then(d => ({ s, count: (d?.data||[]).length })).catch(() => ({ s, count: 0 }))
+      fetch(`${BASE}/api/admin/leave-requests?status=${s}`, { headers: getAuthHeaders() })
+        .then(r => r.json())
+        .then(d => ({ s, count: (d?.data||[]).length }))
+        .catch(() => ({ s, count: 0 }))
     )).then(results => {
       const c = { pending: 0, approved: 0, rejected: 0 };
       results.forEach(r => { c[r.s] = r.count; });
-      setCounts({ ...c, all: c.pending + c.approved + c.rejected });
+      setCounts(c);
     });
   }, [requests]);
 
   const filtered = requests.filter(r => {
     const q = search.toLowerCase();
-    return (r.employee_name||"").toLowerCase().includes(q) || (r.leave_type_name||"").toLowerCase().includes(q) || (r.reason||"").toLowerCase().includes(q);
+    return (r.employee_name||"").toLowerCase().includes(q)
+        || (r.leave_type_name||"").toLowerCase().includes(q)
+        || (r.reason||"").toLowerCase().includes(q);
   });
   const paginated = filtered.slice((page-1)*CARDS_PER_PAGE, page*CARDS_PER_PAGE);
 
-  const statusStyle = {
-    pending:  { dot:"bg-amber-400",   badge:"bg-amber-50 text-amber-700 border-amber-200",     label:"Pending",  cardBorder:"border-amber-200 bg-amber-50/30"  },
-    approved: { dot:"bg-emerald-500", badge:"bg-emerald-50 text-emerald-700 border-emerald-200",label:"Approved", cardBorder:"border-emerald-200 bg-emerald-50/20" },
-    rejected: { dot:"bg-red-400",     badge:"bg-red-50 text-red-600 border-red-200",            label:"Rejected", cardBorder:"border-red-200 bg-red-50/20"        },
-  };
-
   const FILTERS = [
-    { key: "pending",  label: "Pending"  },
-    { key: "approved", label: "Approved" },
-    { key: "rejected", label: "Rejected" },
+    { key: "pending",  label: "Pending",  color: "amber"   },
+    { key: "approved", label: "Approved", color: "emerald" },
+    { key: "rejected", label: "Rejected", color: "red"     },
   ];
 
   return (
     <div className="mt-8">
-      <div className="flex items-center justify-between mb-5">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-200">
-            <Bell size={16} className="text-white"/>
+          <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center shrink-0">
+            <Bell size={17} className="text-violet-600"/>
           </div>
           <div>
             <h3 className="text-sm font-black text-gray-900">Leave Approval Requests</h3>
             <p className="text-[10px] text-gray-400">Review and action employee leave applications</p>
           </div>
           {counts.pending > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-red-500 text-white shadow-sm shadow-red-200 animate-pulse">
+            <span className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-red-500 text-white">
               {counts.pending} pending
             </span>
           )}
@@ -1184,25 +1437,26 @@ function LeaveApprovalSection() {
           <div className="relative">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/>
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search employee, type…"
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-xl outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 bg-white text-gray-700 w-44 transition"/>
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-violet-400 bg-white text-gray-700 w-52 transition"/>
           </div>
-          <button onClick={() => fetchRequests(filter)} className="w-8 h-8 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-violet-500 transition">
-            <RefreshCw size={13}/>
+          <button onClick={() => fetchRequests(filter)} className="w-8 h-8 flex items-center justify-center border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition">
+            <RefreshCw size={12}/>
           </button>
         </div>
       </div>
 
+      {/* ── Filter Tabs ────────────────────────────────────── */}
       <div className="flex items-center gap-2 mb-5 p-1 bg-gray-100 rounded-2xl w-fit">
-        {FILTERS.map(({ key, label }) => {
+        {FILTERS.map(({ key, label, color }) => {
           const isActive = filter === key;
-          const activeStyles = {
-            pending:  "bg-amber-500 text-white shadow-sm shadow-amber-200",
-            approved: "bg-emerald-500 text-white shadow-sm shadow-emerald-200",
-            rejected: "bg-red-500 text-white shadow-sm shadow-red-200",
+          const colorMap = {
+            amber:   isActive ? "bg-amber-500 text-white"    : "text-gray-500 hover:text-gray-700 hover:bg-white",
+            emerald: isActive ? "bg-emerald-500 text-white"  : "text-gray-500 hover:text-gray-700 hover:bg-white",
+            red:     isActive ? "bg-red-500 text-white"      : "text-gray-500 hover:text-gray-700 hover:bg-white",
           };
           return (
             <button key={key} onClick={() => setFilter(key)}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all ${isActive ? activeStyles[key] : "text-gray-500 hover:text-gray-700 hover:bg-white"}`}>
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all ${colorMap[color]}`}>
               {label}
               <span className={`text-[10px] font-black px-1.5 py-0 rounded-full ${isActive ? "bg-white/25 text-white" : "bg-gray-200 text-gray-600"}`}>
                 {counts[key] || 0}
@@ -1223,8 +1477,14 @@ function LeaveApprovalSection() {
         <div className="grid grid-cols-2 gap-4">
           {Array.from({length:4}).map((_,i) => (
             <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 animate-pulse">
-              <div className="flex gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-gray-200"/><div className="flex-1 space-y-2"><div className="h-3 w-28 bg-gray-200 rounded"/><div className="h-2.5 w-20 bg-gray-100 rounded"/></div></div>
-              <div className="grid grid-cols-3 gap-2 mb-3">{[...Array(3)].map((_,j) => <div key={j} className="h-14 bg-gray-100 rounded-xl"/>)}</div>
+              <div className="flex gap-3 mb-4">
+                <div className="w-11 h-11 rounded-full bg-gray-200"/>
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-32 bg-gray-200 rounded"/>
+                  <div className="h-2.5 w-24 bg-gray-100 rounded"/>
+                </div>
+              </div>
+              <div className="h-16 bg-gray-100 rounded-xl mb-3"/>
               <div className="h-8 bg-gray-100 rounded-xl"/>
             </div>
           ))}
@@ -1237,120 +1497,163 @@ function LeaveApprovalSection() {
           <p className="text-sm font-bold text-gray-500">No {filter} requests</p>
           <p className="text-xs mt-1 text-gray-300">{search ? "Try a different search term" : `All ${filter} leave requests will appear here`}</p>
         </div>
-      ) : (<>
-        <div className="grid grid-cols-2 gap-4">
-          {paginated.map(req => {
-            const sc   = statusStyle[req.status] || statusStyle.pending;
-            const preset = getPreset(req.leave_type_name);
-            const PIcon = preset.Icon;
-            const avatarBg = AVATAR_COLORS[(req.employee_id||0) % AVATAR_COLORS.length];
-            const initials = getInitials(req.employee_name || "??");
-            const isLoading = actionLoading === req.id;
-            const isPending = req.status === "pending";
-            const isExtra   = req.is_extra || req.type === "extra";
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            {paginated.map(req => {
+              const preset = getPreset(req.leave_type_name);
+              const PIcon = preset.Icon;
+              const avatarBg = AVATAR_COLORS[(req.employee_id||0) % AVATAR_COLORS.length];
+              const initials = getInitials(req.employee_name || "??");
+              const isLoading = actionLoading === req.id;
+              const isPending = req.status === "pending";
+              const isExtra = req.is_extra || req.type === "extra";
+              const daysCount = req.days || 1;
 
-            return (
-              <div key={req.id}
-                className={`rounded-2xl p-5 border-2 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${sc.cardBorder}`}>
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black shrink-0 ring-2 ring-white shadow-md" style={{backgroundColor:avatarBg}}>
-                        {initials}
+              // Status-driven accent color (left strip)
+              const accentColor = {
+                pending:  "#f59e0b",
+                approved: "#10b981",
+                rejected: "#ef4444",
+              }[req.status] || "#9ca3af";
+
+              // Status pill
+              const statusPill = {
+                pending:  { bg: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-200",   dot: "bg-amber-500"   },
+                approved: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
+                rejected: { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200",     dot: "bg-red-500"     },
+              }[req.status] || { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200", dot: "bg-gray-400" };
+
+              return (
+                <div key={req.id}
+                  className="relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+
+                  {/* Left accent strip */}
+                  <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: accentColor }} />
+
+                  <div className="pl-5 pr-5 py-4">
+
+                    {/* ── Row 1: Employee + Status ────────────── */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="relative shrink-0">
+                          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-black ring-2 ring-white shadow-sm" style={{ backgroundColor: avatarBg }}>
+                            {initials}
+                          </div>
+                          {isExtra && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white flex items-center justify-center">
+                              <Star size={7} className="text-white" fill="white"/>
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-[13px] font-black text-gray-900 truncate">{req.employee_name || "—"}</p>
+                            {isExtra && (
+                              <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600 uppercase tracking-wider">
+                                Extra
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                            #{req.employee_code} · {req.designation || "Employee"}
+                          </p>
+                        </div>
                       </div>
-                      {isExtra && (
-                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white flex items-center justify-center">
-                          <Star size={7} className="text-white" fill="white"/>
+                      <span className={`shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-full border ${statusPill.bg} ${statusPill.text} ${statusPill.border}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusPill.dot}`}/>
+                        {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                      </span>
+                    </div>
+
+                    {/* ── Row 2: Compact info strip ───────────── */}
+                    <div className="flex items-stretch gap-2 mb-3">
+                      {/* Leave type */}
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-0"
+                           style={{ background: preset.bg }}>
+                        <PIcon size={13} style={{ color: preset.color }} className="shrink-0"/>
+                        <div className="min-w-0">
+                          <p className="text-[8px] font-black uppercase tracking-wider" style={{ color: preset.color }}>Type</p>
+                          <p className="text-[11px] font-black text-gray-800 truncate">{req.leave_type_name}</p>
+                        </div>
+                      </div>
+
+                      {/* Days */}
+                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-50 border border-orange-100 shrink-0">
+                        <CalendarDays size={12} className="text-orange-500"/>
+                        <div>
+                          <p className="text-[8px] font-black uppercase tracking-wider text-orange-500">Days</p>
+                          <p className="text-[12px] font-black text-orange-600 leading-none">{daysCount}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Row 3: Period (inline) ──────────────── */}
+                    <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                      <Calendar size={11} className="text-gray-400 shrink-0"/>
+                      <span className="text-[10.5px] font-bold text-gray-700">
+                        {fmtDate(req.start_date)}
+                      </span>
+                      <ArrowRight size={10} className="text-gray-300 shrink-0"/>
+                      <span className="text-[10.5px] font-bold text-gray-700">
+                        {fmtDate(req.end_date)}
+                      </span>
+                    </div>
+
+                    {/* ── Row 4: Reason (compact) ─────────────── */}
+                    <div className="flex items-start gap-2 mb-3">
+                      <MessageSquare size={11} className="text-gray-300 shrink-0 mt-0.5"/>
+                      <p className="text-[11px] text-gray-600 italic leading-snug line-clamp-2">
+                        {req.reason || "—"}
+                      </p>
+                    </div>
+
+                    {/* ── Row 5: Meta footer ──────────────────── */}
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <div className="flex items-center gap-1.5 text-[9.5px] text-gray-400 font-medium">
+                        <Clock size={9}/>
+                        <span>Applied {fmtDateTime(req.applied_at)}</span>
+                      </div>
+                      {isPending && (
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => setRejectModal(req)} disabled={isLoading}
+                            className="flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] font-black text-red-500 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 hover:border-red-200 transition disabled:opacity-50">
+                            {isLoading ? <Loader2 size={10} className="animate-spin"/> : <ThumbsDown size={10}/>}
+                            Reject
+                          </button>
+                          <button onClick={() => handleApprove(req)} disabled={isLoading}
+                            className="flex items-center justify-center gap-1 px-3.5 py-1.5 text-[10px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition disabled:opacity-50 shadow-sm">
+                            {isLoading ? <Loader2 size={10} className="animate-spin"/> : <ThumbsUp size={10}/>}
+                            Approve
+                          </button>
                         </div>
                       )}
+                      {req.status === "approved" && (
+                        <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600">
+                          <CheckCircle2 size={11}/> Approved
+                        </span>
+                      )}
+                      {req.status === "rejected" && (
+                        <span className="flex items-center gap-1 text-[10px] font-black text-red-500">
+                          <XCircle size={11}/> Rejected
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-sm font-black text-gray-900 leading-tight">{req.employee_name || "—"}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">#{req.employee_code} · {req.designation || "Employee"}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border ${sc.badge}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}/>{sc.label}
-                    </span>
-                    {isExtra && (
-                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
-                        <Star size={7} fill="currentColor"/>Extra Leave
-                      </span>
+
+                    {/* Rejection remarks (if any) */}
+                    {req.status === "rejected" && req.remarks && (
+                      <div className="mt-2 px-2.5 py-1.5 bg-red-50 border border-red-100 rounded-lg">
+                        <p className="text-[9.5px] text-red-600 italic">"{req.remarks}"</p>
+                      </div>
                     )}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="col-span-2 p-2.5 rounded-xl border" style={{backgroundColor:preset.bg, borderColor:`${preset.color}22`}}>
-                    <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{color:preset.color}}>Leave Type</p>
-                    <p className="text-[11px] font-black text-gray-800 leading-tight flex items-center gap-1.5">
-                      <PIcon size={11} style={{color:preset.color}}/>
-                      {req.leave_type_name}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-orange-50 border border-orange-100 text-center">
-                    <p className="text-[9px] font-bold text-orange-400 uppercase tracking-wider mb-1">Days</p>
-                    <p className="text-2xl font-black text-orange-600 leading-none">{req.days}</p>
-                  </div>
-                  <div className="col-span-3 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Period</p>
-                    <p className="text-[11px] font-bold text-gray-700">{fmtDate(req.start_date)} → {fmtDate(req.end_date)}</p>
-                  </div>
-                </div>
-
-                <div className="mb-3 px-3 py-2.5 rounded-xl bg-white border border-gray-100 shadow-sm">
-                  <p className="text-[10px] text-gray-500 italic leading-relaxed line-clamp-2">"{req.reason}"</p>
-                  {req.description && req.description !== req.reason && (
-                    <p className="text-[9px] text-gray-400 mt-1 leading-relaxed">{req.description}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[9px] text-gray-400 font-medium mb-3">
-                  <Clock size={9}/>
-                  <span>Applied: {fmtDateTime(req.applied_at)}</span>
-                </div>
-
-                {isPending && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setRejectModal(req)}
-                      disabled={isLoading}
-                      className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-black text-red-500 bg-white border-2 border-red-100 rounded-xl hover:bg-red-50 hover:border-red-300 transition disabled:opacity-50 shadow-sm">
-                      {isLoading ? <Loader2 size={12} className="animate-spin"/> : <ThumbsDown size={12}/>}
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => handleApprove(req)}
-                      disabled={isLoading}
-                      className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 rounded-xl shadow-sm shadow-emerald-200 transition disabled:opacity-50">
-                      {isLoading ? <Loader2 size={12} className="animate-spin"/> : <ThumbsUp size={12}/>}
-                      Approve
-                    </button>
-                  </div>
-                )}
-
-                {req.status === "approved" && (
-                  <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl">
-                    <CheckCircle2 size={14} className="text-emerald-500"/>
-                    <span className="text-xs font-black text-emerald-600">Leave Approved</span>
-                  </div>
-                )}
-                {req.status === "rejected" && (
-                  <div className="flex flex-col items-center justify-center py-2.5 bg-red-50 border-2 border-red-100 rounded-xl gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <XCircle size={14} className="text-red-400"/>
-                      <span className="text-xs font-black text-red-500">Leave Rejected</span>
-                    </div>
-                    {req.remarks && <p className="text-[9px] text-red-400 px-3 text-center italic">"{req.remarks}"</p>}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <Pagination total={filtered.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
-      </>)}
+              );
+            })}
+          </div>
+          <Pagination total={filtered.length} page={page} perPage={CARDS_PER_PAGE} onChange={setPage}/>
+        </>
+      )}
 
       {rejectModal && (
         <RejectModal
@@ -1374,7 +1677,7 @@ function LeaveApprovalSection() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ── MAIN PAGE
+// MAIN PAGE
 // ════════════════════════════════════════════════════════════════════
 export default function LeaveManagement() {
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
@@ -1431,10 +1734,10 @@ export default function LeaveManagement() {
   const totalLeaveTypes = policies.reduce((s,p) => s+(p.leave_types?.length||0), 0);
 
   const stats = [
-    { label:"Total Policies",    value: loading ? "—" : policies.length,  Icon:FileText,  bg:"bg-slate-800",  text:"text-white" },
-    { label:"Active Year",       value: new Date().getFullYear(),          Icon:Calendar,  bg:"bg-orange-500", text:"text-white" },
-    { label:"Leave Types",       value: loading ? "—" : totalLeaveTypes,  Icon:Shield,    bg:"bg-blue-500",   text:"text-white" },
-    { label:"Pending Approvals", value: pendingCount,                      Icon:Bell,      bg:"bg-violet-600", text:"text-white" },
+    { label:"Total Policies",    value: loading ? "—" : policies.length,  Icon:FileText,  bg:"bg-slate-800",  text:"text-white", sub:"Active leave policies" },
+    { label:"Active Year",       value: new Date().getFullYear(),          Icon:Calendar,  bg:"bg-orange-500", text:"text-white", sub:"Current cycle" },
+    { label:"Leave Types",       value: loading ? "—" : totalLeaveTypes,  Icon:Shield,    bg:"bg-blue-500",   text:"text-white", sub:"Across all policies" },
+    { label:"Pending Approvals", value: pendingCount,                      Icon:Bell,      bg:"bg-violet-600", text:"text-white", sub: pendingCount > 0 ? "Requires action" : "All caught up" },
   ];
 
   return (
@@ -1443,10 +1746,14 @@ export default function LeaveManagement() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        {stats.map(({ label, value, Icon, bg, text }) => (
-          <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3 hover:shadow-md transition-shadow">
+        {stats.map(({ label, value, Icon, bg, text, sub }) => (
+          <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${bg} shadow-sm`}><Icon size={20} className={text}/></div>
-            <div><p className="text-[11px] text-gray-400 font-semibold">{label}</p><p className="text-2xl font-black text-gray-900">{value}</p></div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-gray-400 font-semibold">{label}</p>
+              <p className="text-2xl font-black text-gray-900 leading-tight">{value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -1464,7 +1771,7 @@ export default function LeaveManagement() {
             <UserCheck size={13}/>Assign Leave
           </button>
           <button onClick={() => { setEditPolicy(null); setShowCreatePolicy(true); }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 transition shadow-sm shadow-orange-200">
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-white bg-orange-500 hover:bg-orange-600 transition shadow-sm">
             <Plus size={13}/>Create Policy
           </button>
         </div>

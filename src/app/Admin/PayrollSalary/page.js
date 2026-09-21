@@ -1,1573 +1,1702 @@
 "use client";
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  FiSearch, FiDownload, FiPlus, FiEdit2, FiTrash2, FiChevronLeft,
+  FiChevronRight, FiFileText, FiTrendingUp, FiUsers, FiCheck,
+  FiX, FiSend, FiSettings, FiLayers, FiShield, FiClock, FiInfo,
+  FiAlertTriangle, FiRefreshCw, FiCheckCircle, FiXCircle, FiBriefcase,
+  FiDollarSign, FiAward, FiUser, FiCalendar, FiEye, FiTarget,
+  FiActivity, FiChevronDown, FiFilter, FiSave, FiSliders,
+  FiPieChart, FiBarChart2, FiMoreVertical, FiStar, FiZap
+} from "react-icons/fi";
+import { HiOutlineOfficeBuilding } from "react-icons/hi";
+import {
+  MdOutlineBeachAccess, MdOutlineSick, MdOutlineWorkOff,
+  MdOutlineCelebration, MdOutlineChildCare, MdOutlineEventBusy
+} from "react-icons/md";
+import { PiBriefcaseBold } from "react-icons/pi";
+
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const BASE = process.env.NEXT_PUBLIC_API_URL;
+
 
 const ACCENT = "#f97316";
 const DEPARTMENTS = ["All","Engineering","Design","Finance","HR","Marketing","Sales","Operations"];
-const BASE_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/admin`;
 
-// ── AUTH ──────────────────────────────────────────────────────────────────────
-function getHeaders() {
-  if (typeof window === "undefined") return { "Content-Type": "application/json" };
-  const token     = localStorage.getItem("admin_auth_token") || "";
-  const companyId = localStorage.getItem("company_id")     || "";
+// ─── AUTH ──────────────────────────────────────────────────────────────────
+const getAuthHeaders = () => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("admin_auth_token") : null;
   return {
     "Content-Type": "application/json",
-    ...(token     && { "Authorization": `Bearer ${token}` }),
-    ...(companyId && { "X-Company-ID": companyId }),
+    Accept: "application/json",
+    "ngrok-skip-browser-warning": "true",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-}
-
-// ── RAW API ───────────────────────────────────────────────────────────────────
-const api = {
-  getComponents:   ()      => fetch(`${BASE_URL}/payroll-components`,       { headers:getHeaders() }).then(r=>r.json()),
-  createComponent: (b)     => fetch(`${BASE_URL}/payroll-components`,       { method:"POST",   headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  updateComponent: (id,b)  => fetch(`${BASE_URL}/payroll-components/${id}`, { method:"PUT",    headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  deleteComponent: (id)    => fetch(`${BASE_URL}/payroll-components/${id}`, { method:"DELETE", headers:getHeaders() }).then(r=>r.json()),
-
-  getDeductions:   ()      => fetch(`${BASE_URL}/payroll-deductions`,       { headers:getHeaders() }).then(r=>r.json()),
-  createDeduction: (b)     => fetch(`${BASE_URL}/payroll-deductions`,       { method:"POST",   headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  updateDeduction: (id,b)  => fetch(`${BASE_URL}/payroll-deductions/${id}`, { method:"PUT",    headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  deleteDeduction: (id)    => fetch(`${BASE_URL}/payroll-deductions/${id}`, { method:"DELETE", headers:getHeaders() }).then(r=>r.json()),
-
-  getStructures:   ()      => fetch(`${BASE_URL}/salary-structures`,        { headers:getHeaders() }).then(r=>r.json()),
-  createStructure: (b)     => fetch(`${BASE_URL}/salary-structures`,        { method:"POST",   headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  updateStructure: (id,b)  => fetch(`${BASE_URL}/salary-structures/${id}`,  { method:"PUT",    headers:getHeaders(), body:JSON.stringify(b) }).then(r=>r.json()),
-  deleteStructure: (id)    => fetch(`${BASE_URL}/salary-structures/${id}`,  { method:"DELETE", headers:getHeaders() }).then(r=>r.json()),
-
-  getDashboardStats: (year) => fetch(`${BASE_URL}/payroll/dashboard-stats?year=${year}`, { headers:getHeaders() }).then(r=>r.json()),
 };
 
-// ── MONTH NAME MAP ─────────────────────────────────────────────────────────────
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-// ── CALC TYPES ────────────────────────────────────────────────────────────────
-const CALC_TYPES = [
-  { value:"fixed",               label:"Fixed ₹/month"  },
-  { value:"percentage_of_basic", label:"% of Basic"     },
-  { value:"percentage_of_gross", label:"% of Gross"     },
-];
-function calcLabel(t){ return CALC_TYPES.find(o=>o.value===t)?.label || t || "—"; }
-
-const SALARY_GRADE_TEMPLATES = {
-  basic:  { basicPct:60, hraPct:20, conveyancePct:5, medicalPct:3,  specialPct:7, bonusPct:5 },
-  medium: { basicPct:55, hraPct:22, conveyancePct:6, medicalPct:4,  specialPct:8, bonusPct:5 },
-  high:   { basicPct:50, hraPct:25, conveyancePct:5, medicalPct:5,  specialPct:8, bonusPct:7 },
-  Basic:  { basicPct:60, hraPct:20, conveyancePct:5, medicalPct:3,  specialPct:7, bonusPct:5 },
-  Medium: { basicPct:55, hraPct:22, conveyancePct:6, medicalPct:4,  specialPct:8, bonusPct:5 },
-  High:   { basicPct:50, hraPct:25, conveyancePct:5, medicalPct:5,  specialPct:8, bonusPct:7 },
-};
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-const fmt = (n) => "₹" + Number(n).toLocaleString("en-IN");
+// ─── HELPERS ───────────────────────────────────────────────────────────────
+const fmt = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 function fmtShort(n) {
+  n = Number(n || 0);
   if (n >= 10000000) return "₹" + (n/10000000).toFixed(1) + "Cr";
   if (n >= 100000)   return "₹" + (n/100000).toFixed(1) + "L";
   if (n >= 1000)     return "₹" + (n/1000).toFixed(0) + "K";
   return "₹" + n;
 }
+const getInitials = (name = "") => name.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0,2).toUpperCase() || "??";
+const getFullName = (emp) => {
+  if (!emp) return "Unknown";
+  if (typeof emp === "string") return emp;
+  return [emp.firstname, emp.lastname].filter(Boolean).join(" ") || emp.name || "Unknown";
+};
+const getRole = (emp) => emp?.designation?.name || emp?.designation || emp?.role || "Employee";
+
 const COMP_COLORS = ["#16a34a","#3b82f6","#06b6d4","#8b5cf6","#f59e0b","#ec4899","#ef4444","#6366f1","#14b8a6","#f97316"];
 const AV_COLORS   = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308","#ef4444","#06b6d4"];
-function avatarBg(name){ let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))&0xffffffff; return AV_COLORS[Math.abs(h)%AV_COLORS.length]; }
-function compColor(idx){ return COMP_COLORS[idx % COMP_COLORS.length]; }
 
-// ── BASE COMPONENTS ───────────────────────────────────────────────────────────
-function Avatar({ name="?", size=34 }) {
-  const initials = name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
-  return <div style={{width:size,height:size,borderRadius:"50%",background:avatarBg(name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.33,fontWeight:800,color:"#fff",flexShrink:0,letterSpacing:"-0.5px",fontFamily:"Nunito,sans-serif"}}>{initials}</div>;
+function avatarBg(name = "") {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return AV_COLORS[Math.abs(h) % AV_COLORS.length];
+}
+
+const LEAVE_COLORS = ["#3b82f6","#8b5cf6","#ec4899","#f97316","#10b981","#f59e0b","#06b6d4","#ef4444"];
+
+// ─── BASE UI ───────────────────────────────────────────────────────────────
+function Avatar({ name = "?", size = 34 }) {
+  return (
+    <div className="flex items-center justify-center font-bold text-white shrink-0"
+      style={{ width: size, height: size, borderRadius: "50%", background: avatarBg(name), fontSize: size * 0.33 }}>
+      {getInitials(name)}
+    </div>
+  );
 }
 
 const STATUS_CFG = {
-  Paid:    {bg:"#f0fdf4",color:"#16a34a",border:"#bbf7d0",dot:"#22c55e"},
-  Pending: {bg:"#fffbeb",color:"#d97706",border:"#fde68a",dot:"#f59e0b"},
-  Unpaid:  {bg:"#fef2f2",color:"#dc2626",border:"#fecaca",dot:"#ef4444"},
+  Paid:    { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0", dot:"#22c55e", Icon: FiCheckCircle },
+  Pending: { bg:"#fffbeb", color:"#d97706", border:"#fde68a", dot:"#f59e0b", Icon: FiClock       },
+  Unpaid:  { bg:"#fef2f2", color:"#dc2626", border:"#fecaca", dot:"#ef4444", Icon: FiXCircle     },
 };
 function StatusBadge({ status }) {
-  const cfg = STATUS_CFG[status]||STATUS_CFG.Pending;
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,background:cfg.bg,border:`1px solid ${cfg.border}`,fontSize:11.5,fontWeight:800,color:cfg.color,whiteSpace:"nowrap"}}><span style={{width:6,height:6,borderRadius:"50%",background:cfg.dot}}/>{status}</span>;
+  const cfg = STATUS_CFG[status] || STATUS_CFG.Pending;
+  const Icon = cfg.Icon;
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"
+      style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}>
+      <Icon size={11} />{status}
+    </span>
+  );
 }
 
 const GRADE_CFG = {
-  basic:  {bg:"#f0fdf4",color:"#16a34a",border:"#bbf7d0",label:"Basic"},
-  medium: {bg:"#fffbeb",color:"#b45309",border:"#fde68a",label:"Medium"},
-  high:   {bg:"#eef2ff",color:"#4f46e5",border:"#c7d2fe",label:"High"},
-  Basic:  {bg:"#f0fdf4",color:"#16a34a",border:"#bbf7d0",label:"Basic"},
-  Medium: {bg:"#fffbeb",color:"#b45309",border:"#fde68a",label:"Medium"},
-  High:   {bg:"#eef2ff",color:"#4f46e5",border:"#c7d2fe",label:"High"},
+  basic:  { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
+  medium: { bg:"#fffbeb", color:"#b45309", border:"#fde68a" },
+  high:   { bg:"#eef2ff", color:"#4f46e5", border:"#c7d2fe" },
 };
 function GradeBadge({ grade }) {
-  const cfg = GRADE_CFG[grade]||GRADE_CFG.Basic;
-  return <span style={{padding:"2px 8px",borderRadius:99,background:cfg.bg,border:`1px solid ${cfg.border}`,fontSize:10.5,fontWeight:800,color:cfg.color}}>{cfg.label}</span>;
+  const g = (grade || "basic").toLowerCase();
+  const cfg = GRADE_CFG[g] || GRADE_CFG.basic;
+  return (
+    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold capitalize"
+      style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}>
+      {g}
+    </span>
+  );
 }
 
-const DEPT_COLORS = {Engineering:"#eef2ff|#4f46e5",Design:"#fdf2f8|#be185d",Finance:"#fff7ed|#c2410c",HR:"#f0fdf4|#15803d",Marketing:"#fef9c3|#a16207",Sales:"#f0fdfa|#0f766e",Operations:"#f8fafc|#475569"};
-function DeptBadge({ dept }) {
-  const [bg,color] = (DEPT_COLORS[dept]||"#f3f4f6|#374151").split("|");
-  return <span style={{padding:"2px 9px",borderRadius:20,background:bg,fontSize:11,fontWeight:700,color,whiteSpace:"nowrap"}}>{dept}</span>;
-}
-
-const Ic = ({ d, size=14, stroke="currentColor", fill="none", sw=1.8, style={} }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{display:"block",flexShrink:0,...style}}>
-    {Array.isArray(d)?d.map((p,i)=><path key={i} d={p}/>):<path d={d}/>}
-  </svg>
-);
-
-const ICONS = {
-  search:   "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z",
-  download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
-  plus:     "M12 5v14M5 12h14",
-  edit:     "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
-  trash:    "M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
-  chevLeft: "M15 18l-6-6 6-6",
-  chevRight:"M9 18l6-6-6-6",
-  fileText: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6M16 13H8M16 17H8M10 9H8",
-  trending: "M23 6l-9.5 9.5-5-5L1 18 M17 6h6v6",
-  wallet:   "M21 12V7H5a2 2 0 0 1 0-4h14v4 M3 5v14a2 2 0 0 0 2 2h16v-5 M18 12a2 2 0 0 0 0 4h4v-4z",
-  users:    "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
-  check:    "M20 6L9 17l-5-5",
-  x:        "M18 6L6 18M6 6l12 12",
-  send:     "M22 2L11 13 M22 2L15 22l-4-9-9-4 22-7z",
-  settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z",
-  layers:   "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
-  shield:   "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
-  info:     "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8h.01M12 12v4",
-  sparkle:  "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
-  tag:      "M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01",
+const DEPT_COLORS = {
+  Engineering:"#eef2ff|#4f46e5", Design:"#fdf2f8|#be185d", Finance:"#fff7ed|#c2410c",
+  HR:"#f0fdf4|#15803d", Marketing:"#fef9c3|#a16207", Sales:"#f0fdfa|#0f766e",
+  Operations:"#f8fafc|#475569"
 };
-
-function Spinner({ size=13, color="#fff" }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" style={{animation:"spin 0.8s linear infinite",display:"block",flexShrink:0}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
+function DeptBadge({ dept }) {
+  if (!dept) return <span className="text-gray-400 text-[11px]">—</span>;
+  const [bg, color] = (DEPT_COLORS[dept] || "#f3f4f6|#374151").split("|");
+  return (
+    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: bg, color }}>
+      {dept}
+    </span>
+  );
 }
 
-function Toggle({ enabled, onChange, size="md" }) {
-  const w=size==="sm"?32:42, h=size==="sm"?18:24, knob=size==="sm"?12:18, offset=3;
+function Spinner({ size = 13, color = "#fff" }) {
   return (
-    <div onClick={onChange} style={{width:w,height:h,borderRadius:h,background:enabled?ACCENT:"#e5e7eb",cursor:"pointer",position:"relative",transition:"background 0.25s",flexShrink:0,boxShadow:enabled?`0 0 10px ${ACCENT}55`:"none"}}>
-      <div style={{position:"absolute",top:offset,left:enabled?w-knob-offset:offset,width:knob,height:knob,borderRadius:"50%",background:"#fff",transition:"left 0.25s",boxShadow:"0 2px 6px rgba(0,0,0,0.22)"}}/>
-    </div>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5}
+      strokeLinecap="round" className="animate-spin shrink-0">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── COMPONENT CARD (inline edit)
+// PAYSLIP MODAL
 // ════════════════════════════════════════════════════════════════════════════
-function ComponentCard({ comp, idx, onEditApi, onDeleteApi, deleting }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState({ name: comp.name, calculation_type: comp.calculation_type });
-  const [saving, setSaving]   = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await onEditApi(comp.id, draft);
-    setSaving(false);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <div style={{padding:"10px 12px",background:"#fff",borderRadius:11,border:`2px solid ${compColor(idx)}`,boxShadow:`0 0 0 3px ${compColor(idx)}22`}}>
-        <div style={{display:"flex",gap:7,marginBottom:8}}>
-          <input value={draft.name} onChange={e=>setDraft(p=>({...p,name:e.target.value}))}
-            style={{flex:1,padding:"6px 9px",border:"1px solid #e5e7eb",borderRadius:7,fontSize:12,outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:700}}
-            onFocus={e=>e.target.style.borderColor=compColor(idx)} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          <select value={draft.calculation_type} onChange={e=>setDraft(p=>({...p,calculation_type:e.target.value}))}
-            style={{padding:"6px 8px",border:"1px solid #e5e7eb",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:600,cursor:"pointer"}}>
-            {CALC_TYPES.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setEditing(false)} style={{flex:1,padding:"5px 0",background:"#f3f4f6",border:"none",borderRadius:7,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"Nunito,sans-serif",color:"#6b7280"}}>Cancel</button>
-          <button onClick={handleSave} disabled={saving||!draft.name.trim()}
-            style={{flex:2,padding:"5px 0",background:saving||!draft.name.trim()?"#d1d5db":ACCENT,border:"none",borderRadius:7,fontSize:11.5,fontWeight:800,color:"#fff",cursor:saving||!draft.name.trim()?"not-allowed":"pointer",fontFamily:"Nunito,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-            {saving?<><Spinner size={11}/>&nbsp;Saving…</>:"Save"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{padding:"10px 12px",background:"#fafafa",borderRadius:11,border:"1px solid #f1f5f9",display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all 0.15s",position:"relative"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <div style={{width:10,height:10,borderRadius:3,background:compColor(idx),flexShrink:0}}/>
-        <div>
-          <span style={{fontSize:12.5,fontWeight:700,color:"#374151"}}>{comp.name}</span>
-          <div style={{fontSize:10,color:"#9ca3af",marginTop:1,fontWeight:600}}>{calcLabel(comp.calculation_type)}</div>
-        </div>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:11,fontWeight:800,color:comp.is_active?"#16a34a":"#9ca3af",background:comp.is_active?"#f0fdf4":"#f3f4f6",padding:"1px 7px",borderRadius:99,border:`1px solid ${comp.is_active?"#bbf7d0":"#e5e7eb"}`}}>
-          {comp.is_active?"Active":"Inactive"}
-        </span>
-        <button onClick={()=>setEditing(true)} style={{width:24,height:24,background:"#fff",border:"1px solid #e5e7eb",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-          <Ic d={ICONS.edit} stroke="#6b7280" size={10}/>
-        </button>
-        <button onClick={()=>onDeleteApi(comp.id)} disabled={deleting===comp.id}
-          style={{width:24,height:24,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:deleting===comp.id?0.5:1}}>
-          {deleting===comp.id?<Spinner size={10} color="#dc2626"/>:<Ic d={ICONS.trash} stroke="#dc2626" size={10}/>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── DEDUCTION CARD ─────────────────────────────────────────────────────────────
-function DeductionCard({ ded, onToggleApi, onEditApi, onDeleteApi, deleting }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState({ name: ded.name, calculation_type: ded.calculation_type });
-  const [saving, setSaving]   = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await onEditApi(ded.id, { ...draft, is_active: ded.is_active });
-    setSaving(false);
-    setEditing(false);
-  };
-
-  return (
-    <div style={{borderRadius:12,border:`1.5px solid ${ded.is_active?"#fecaca":"#f1f5f9"}`,background:ded.is_active?"#fef2f2":"#fafafa",transition:"all 0.2s",overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <Toggle enabled={!!ded.is_active} onChange={()=>onToggleApi(ded)} size="sm"/>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:ded.is_active?"#111827":"#9ca3af"}}>{ded.name}</div>
-            <div style={{fontSize:11,color:ded.is_active?"#dc2626":"#9ca3af",marginTop:1,fontWeight:600}}>{calcLabel(ded.calculation_type)}</div>
-          </div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:7}}>
-          <button onClick={()=>setEditing(p=>!p)} style={{width:26,height:26,background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-            <Ic d={ICONS.edit} stroke="#6b7280" size={10}/>
-          </button>
-          <button onClick={()=>onDeleteApi(ded.id)} disabled={deleting===ded.id}
-            style={{width:26,height:26,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:deleting===ded.id?0.5:1}}>
-            {deleting===ded.id?<Spinner size={10} color="#dc2626"/>:<Ic d={ICONS.trash} stroke="#dc2626" size={10}/>}
-          </button>
-        </div>
-      </div>
-      {editing && (
-        <div style={{padding:"10px 14px",borderTop:"1px solid #fde68a",background:"#fff7ed",display:"flex",flexDirection:"column",gap:8}}>
-          <input value={draft.name} onChange={e=>setDraft(p=>({...p,name:e.target.value}))} placeholder="Deduction name"
-            style={{width:"100%",padding:"6px 10px",border:"1.5px solid #fde68a",borderRadius:7,fontSize:12.5,fontWeight:600,outline:"none",fontFamily:"Nunito,sans-serif",boxSizing:"border-box"}}/>
-          <div style={{display:"flex",gap:6}}>
-            <select value={draft.calculation_type} onChange={e=>setDraft(p=>({...p,calculation_type:e.target.value}))}
-              style={{flex:1,padding:"6px 8px",border:"1.5px solid #fde68a",borderRadius:7,fontSize:11.5,outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:600,cursor:"pointer"}}>
-              {CALC_TYPES.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <button onClick={()=>setEditing(false)} style={{padding:"6px 10px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,fontSize:12,fontWeight:700,color:"#6b7280",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>✕</button>
-            <button onClick={handleSave} disabled={saving||!draft.name.trim()}
-              style={{padding:"6px 14px",background:saving?"#d1d5db":ACCENT,border:"none",borderRadius:7,fontSize:12,fontWeight:800,color:"#fff",cursor:saving?"not-allowed":"pointer",fontFamily:"Nunito,sans-serif",display:"flex",alignItems:"center",gap:5}}>
-              {saving?<><Spinner size={11}/>&nbsp;Saving…</>:"Save"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── ADD COMPONENT MODAL ────────────────────────────────────────────────────────
-function AddComponentModal({ onClose, onAdd }) {
-  const [name, setName]   = useState("");
-  const [ct,   setCt]     = useState("fixed");
-  const [saving,setSaving]= useState(false);
-  const [err,  setErr]    = useState("");
-
-  const handleAdd = async () => {
-    if (!name.trim()) return;
-    setSaving(true); setErr("");
-    try {
-      const res = await api.createComponent({ name: name.trim(), calculation_type: ct });
-      if (res.success!==false && res.data) { onAdd(res.data); }
-      else setErr("Failed to add.");
-    } catch { setErr("Network error."); }
-    setSaving(false);
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:360,padding:22,boxShadow:"0 32px 80px rgba(0,0,0,0.24)",animation:"modalIn 0.22s ease"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-          <div style={{fontSize:15,fontWeight:800,color:"#111827"}}>New Component</div>
-          <button onClick={onClose} style={{width:28,height:28,borderRadius:8,background:"#f3f4f6",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.x} stroke="#6b7280" size={12}/></button>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:13}}>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>Component Name <span style={{color:"#ef4444"}}>*</span></label>
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Basic Salary"
-              style={{width:"100%",padding:"9px 12px",border:"1px solid #e5e7eb",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Nunito,sans-serif"}}
-              onFocus={e=>e.target.style.borderColor=ACCENT} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          </div>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>Calculation Type</label>
-            <div style={{display:"flex",gap:6}}>
-              {CALC_TYPES.map(({value:v,label:l})=>(
-                <button key={v} onClick={()=>setCt(v)}
-                  style={{flex:1,padding:"7px 4px",borderRadius:8,border:`2px solid ${ct===v?ACCENT:"#e5e7eb"}`,background:ct===v?"#fff7ed":"#fff",fontSize:10.5,fontWeight:700,color:ct===v?ACCENT:"#9ca3af",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-          {err && <div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>{err}</div>}
-        </div>
-        <div style={{display:"flex",gap:9,marginTop:18}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px 0",background:"#fff",border:"1px solid #e5e7eb",borderRadius:9,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>Cancel</button>
-          <button onClick={handleAdd} disabled={!name.trim()||saving}
-            style={{flex:2,padding:"9px 0",background:name.trim()&&!saving?ACCENT:"#d1d5db",border:"none",borderRadius:9,fontSize:13,fontWeight:800,color:"#fff",cursor:name.trim()&&!saving?"pointer":"not-allowed",fontFamily:"Nunito,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            {saving?<><Spinner size={13}/>&nbsp;Adding…</>:<><Ic d={ICONS.plus} stroke="#fff" size={13}/> Add Component</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── ADD DEDUCTION MODAL ────────────────────────────────────────────────────────
-function AddDeductionModal({ onClose, onAdd }) {
-  const [name, setName]   = useState("");
-  const [ct,   setCt]     = useState("fixed");
-  const [saving,setSaving]= useState(false);
-  const [err,  setErr]    = useState("");
-
-  const handleAdd = async () => {
-    if (!name.trim()) return;
-    setSaving(true); setErr("");
-    try {
-      const res = await api.createDeduction({ name: name.trim(), calculation_type: ct });
-      if (res.success!==false && res.data) { onAdd(res.data); }
-      else setErr("Failed to add.");
-    } catch { setErr("Network error."); }
-    setSaving(false);
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:360,padding:22,boxShadow:"0 32px 80px rgba(0,0,0,0.24)",animation:"modalIn 0.22s ease"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-          <div style={{fontSize:15,fontWeight:800,color:"#111827"}}>New Deduction</div>
-          <button onClick={onClose} style={{width:28,height:28,borderRadius:8,background:"#f3f4f6",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.x} stroke="#6b7280" size={12}/></button>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:13}}>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>Deduction Name <span style={{color:"#ef4444"}}>*</span></label>
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Provident Fund (PF)"
-              style={{width:"100%",padding:"9px 12px",border:"1px solid #e5e7eb",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Nunito,sans-serif"}}
-              onFocus={e=>e.target.style.borderColor="#dc2626"} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          </div>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>Calculation Type</label>
-            <div style={{display:"flex",gap:6}}>
-              {CALC_TYPES.map(({value:v,label:l})=>(
-                <button key={v} onClick={()=>setCt(v)}
-                  style={{flex:1,padding:"7px 4px",borderRadius:8,border:`2px solid ${ct===v?"#dc2626":"#e5e7eb"}`,background:ct===v?"#fef2f2":"#fff",fontSize:10.5,fontWeight:700,color:ct===v?"#dc2626":"#9ca3af",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-          {err && <div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>{err}</div>}
-        </div>
-        <div style={{display:"flex",gap:9,marginTop:18}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px 0",background:"#fff",border:"1px solid #e5e7eb",borderRadius:9,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>Cancel</button>
-          <button onClick={handleAdd} disabled={!name.trim()||saving}
-            style={{flex:2,padding:"9px 0",background:name.trim()&&!saving?"#dc2626":"#d1d5db",border:"none",borderRadius:9,fontSize:13,fontWeight:800,color:"#fff",cursor:name.trim()&&!saving?"pointer":"not-allowed",fontFamily:"Nunito,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            {saving?<><Spinner size={13}/>&nbsp;Adding…</>:<><Ic d={ICONS.plus} stroke="#fff" size={13}/> Add Deduction</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// ── SALARY STRUCTURE MODAL
-// ════════════════════════════════════════════════════════════════════════════
-function SalaryStructureModal({ onClose, onSave, editItem }) {
-  const isEdit = !!editItem;
-  const [step,   setStep]   = useState(1);
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState("");
-
-  const [allComponents,  setAllComponents]  = useState([]);
-  const [allDeductions,  setAllDeductions]  = useState([]);
-  const [loadingData,    setLoadingData]    = useState(true);
-  const [showAddComp,    setShowAddComp]    = useState(false);
-  const [showAddDed,     setShowAddDed]     = useState(false);
-  const [deletingComp,   setDeletingComp]   = useState(null);
-  const [deletingDed,    setDeletingDed]    = useState(null);
-
-  const [form, setForm] = useState({
-    name:        editItem?.name || "",
-    grade:       editItem?.grade || "basic",
-    annual_ctc:  parseFloat(editItem?.annual_ctc)  || 480000,
-    monthly_ctc: parseFloat(editItem?.monthly_ctc) || 40000,
-  });
-
-  const [selComps, setSelComps] = useState(() => {
-    if (!editItem?.components) return {};
-    const m = {};
-    editItem.components.forEach(c => {
-      m[c.id] = { value: parseFloat(c.pivot?.value || 0), calculation_type: c.pivot?.calculation_type || c.calculation_type || "fixed" };
-    });
-    return m;
-  });
-
-  const [selDeds, setSelDeds] = useState(() => {
-    if (!editItem?.deductions) return {};
-    const m = {};
-    editItem.deductions.forEach(d => {
-      m[d.id] = { value: parseFloat(d.pivot?.value || 0), calculation_type: d.pivot?.calculation_type || d.calculation_type || "fixed" };
-    });
-    return m;
-  });
+function PayslipModal({ employee, monthNum, year, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     (async () => {
-      setLoadingData(true);
+      setLoading(true); setError(null);
       try {
-        const [c, d] = await Promise.all([api.getComponents(), api.getDeductions()]);
-        setAllComponents(Array.isArray(c) ? c : []);
-        setAllDeductions(Array.isArray(d) ? d : []);
-      } catch {}
-      setLoadingData(false);
+        const res = await fetch(`${BASE}/api/admin/payslip/${employee.id}/${monthNum}/${year}`, { headers: getAuthHeaders() });
+        const j = await res.json();
+        if (!res.ok || !j.success) throw new Error(j.message || j.error || "Failed to load payslip");
+        setData(j);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, []);
+  }, [employee.id, monthNum, year]);
 
-  const updateCTC = (annual) => {
-    setForm(p => ({ ...p, annual_ctc: annual, monthly_ctc: Math.round(annual / 12) }));
+  const handleSend = async () => {
+    setSending(true);
+    await new Promise(r => setTimeout(r, 1200));
+    setSending(false);
+    setSent(true);
+    setTimeout(() => setSent(false), 3000);
   };
-
-  useEffect(() => {
-    const total = Object.values(selComps).reduce((s, v) => s + (v.value || 0), 0);
-    if (total > 0) setForm(p => ({ ...p, monthly_ctc: total, annual_ctc: total * 12 }));
-  }, [selComps]);
-
-  const applyGrade = (grade) => {
-    const tpl = SALARY_GRADE_TEMPLATES[grade] || SALARY_GRADE_TEMPLATES.basic;
-    const monthly = form.monthly_ctc;
-    const pcts = [tpl.basicPct, tpl.hraPct, tpl.medicalPct, tpl.conveyancePct, tpl.specialPct, tpl.bonusPct];
-    const keys = Object.keys(selComps);
-    const newSel = { ...selComps };
-    keys.forEach((id, i) => { newSel[id] = { ...newSel[id], value: Math.round(monthly * (pcts[i] || 5) / 100) }; });
-    setSelComps(newSel);
-    setForm(p => ({ ...p, grade }));
-  };
-
-  const handleEditCompApi = async (id, draft) => {
-    const res = await api.updateComponent(id, { name: draft.name, calculation_type: draft.calculation_type });
-    if (res.data) setAllComponents(prev => prev.map(c => c.id === id ? res.data : c));
-  };
-  const handleDeleteCompApi = async (id) => {
-    setDeletingComp(id);
-    await api.deleteComponent(id);
-    setAllComponents(prev => prev.filter(c => c.id !== id));
-    setSelComps(prev => { const n = {...prev}; delete n[id]; return n; });
-    setDeletingComp(null);
-  };
-  const handleAddCompDone = (newComp) => { setAllComponents(prev => [...prev, newComp]); setShowAddComp(false); };
-
-  const handleToggleDedApi = async (ded) => {
-    const updated = { ...ded, is_active: !ded.is_active };
-    setAllDeductions(prev => prev.map(d => d.id === ded.id ? updated : d));
-    try { await api.updateDeduction(ded.id, { is_active: !ded.is_active }); }
-    catch { setAllDeductions(prev => prev.map(d => d.id === ded.id ? ded : d)); }
-  };
-  const handleEditDedApi = async (id, draft) => {
-    const res = await api.updateDeduction(id, { name: draft.name, calculation_type: draft.calculation_type, is_active: draft.is_active });
-    if (res.data) setAllDeductions(prev => prev.map(d => d.id === id ? res.data : d));
-  };
-  const handleDeleteDedApi = async (id) => {
-    setDeletingDed(id);
-    await api.deleteDeduction(id);
-    setAllDeductions(prev => prev.filter(d => d.id !== id));
-    setSelDeds(prev => { const n = {...prev}; delete n[id]; return n; });
-    setDeletingDed(null);
-  };
-  const handleAddDedDone = (newDed) => { setAllDeductions(prev => [...prev, newDed]); setShowAddDed(false); };
-
-  const toggleComp = (comp) => {
-    setSelComps(prev => {
-      if (prev[comp.id]) { const n = {...prev}; delete n[comp.id]; return n; }
-      return { ...prev, [comp.id]: { value: 0, calculation_type: comp.calculation_type || "fixed" } };
-    });
-  };
-
-  const updateSelComp = (changedId, field, val) => {
-    if (field !== "value") {
-      setSelComps(prev => ({ ...prev, [changedId]: { ...prev[changedId], [field]: val } }));
-      return;
-    }
-    const changedValue = Number(val);
-    const monthly = form.monthly_ctc;
-    const remaining = Math.max(0, monthly - changedValue);
-    const otherIds = Object.keys(selComps).filter(k => k !== String(changedId));
-    if (otherIds.length === 0) {
-      setSelComps(prev => ({ ...prev, [changedId]: { ...prev[changedId], value: changedValue } }));
-      return;
-    }
-    const tpl = SALARY_GRADE_TEMPLATES[form.grade] || SALARY_GRADE_TEMPLATES.basic;
-    const gradePcts = [tpl.basicPct, tpl.hraPct, tpl.conveyancePct, tpl.medicalPct, tpl.specialPct, tpl.bonusPct];
-    const otherPcts = otherIds.map(id => { const idx = allComponents.findIndex(c => String(c.id) === String(id)); return gradePcts[idx] ?? (100 / (otherIds.length + 1)); });
-    const totalOtherPct = otherPcts.reduce((s, p) => s + p, 0) || 1;
-    setSelComps(prev => {
-      const updated = { ...prev, [changedId]: { ...prev[changedId], value: changedValue } };
-      let assigned = 0;
-      otherIds.forEach((id, i) => {
-        const isLast = i === otherIds.length - 1;
-        const v = isLast ? remaining - assigned : Math.round(remaining * (otherPcts[i] / totalOtherPct));
-        assigned += v;
-        updated[id] = { ...updated[id], value: Math.max(0, v) };
-      });
-      return updated;
-    });
-  };
-
-  const toggleDed = (ded) => {
-    setSelDeds(prev => {
-      if (prev[ded.id]) { const n = {...prev}; delete n[ded.id]; return n; }
-      return { ...prev, [ded.id]: { value: 0, calculation_type: ded.calculation_type || "fixed" } };
-    });
-  };
-  const updateSelDed = (id, field, val) => setSelDeds(prev => ({ ...prev, [id]: { ...prev[id], [field]: field==="value"?Number(val):val } }));
-
-  const totalEarnings   = Object.entries(selComps).reduce((s,[,v]) => s + (v.value||0), 0);
-  const totalDeductions = Object.entries(selDeds).reduce((s,[,v]) => s + (v.value||0), 0);
-  const netMonthly      = totalEarnings - totalDeductions;
-  const monthlyCTC      = form.monthly_ctc;
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    setSaving(true); setErr("");
-    const payload = {
-      name: form.name, grade: form.grade, annual_ctc: form.annual_ctc, monthly_ctc: form.monthly_ctc,
-      components: Object.entries(selComps).map(([id,v],i) => ({ id:Number(id), value:v.value, calculation_type:v.calculation_type, sort_order:i+1 })),
-      deductions:  Object.entries(selDeds).map(([id,v],i)  => ({ id:Number(id), value:v.value, calculation_type:v.calculation_type, sort_order:i+1 })),
-    };
-    try {
-      const res = isEdit ? await api.updateStructure(editItem.id, payload) : await api.createStructure(payload);
-      if (res.success!==false && res.data) { onSave(); onClose(); }
-      else setErr("Failed to save. Please try again.");
-    } catch { setErr("Network error."); }
-    setSaving(false);
-  };
-
-  const STEPS = [{n:1,label:"Basic Info"},{n:2,label:"Components"},{n:3,label:"Deductions"}];
 
   return (
-    <>
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",backdropFilter:"blur(10px)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()}
-        style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:660,maxHeight:"94vh",display:"flex",flexDirection:"column",boxShadow:"0 48px 120px rgba(0,0,0,0.35)",animation:"modalIn 0.3s cubic-bezier(.34,1.2,.64,1)"}}>
-        <div style={{background:"linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",padding:"20px 26px",borderRadius:"22px 22px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:`${ACCENT}15`}}/>
-          <div style={{position:"absolute",bottom:-30,left:40,width:80,height:80,borderRadius:"50%",background:"#6366f115"}}/>
-          <div style={{display:"flex",alignItems:"center",gap:13,position:"relative"}}>
-            <div style={{width:42,height:42,borderRadius:13,background:`linear-gradient(135deg,${ACCENT},#ea580c)`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 6px 18px ${ACCENT}55`}}>
-              <Ic d={ICONS.layers} stroke="#fff" size={18}/>
-            </div>
-            <div>
-              <div style={{fontSize:16,fontWeight:900,color:"#fff",letterSpacing:"-0.3px"}}>{isEdit?"Edit":"Create"} Salary Structure</div>
-              <div style={{fontSize:11.5,color:"#64748b",marginTop:1}}>Define compensation package template</div>
-            </div>
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between shrink-0">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Payslip</p>
+            <h2 className="text-base font-bold text-gray-900">
+              {getFullName(employee)} — {data?.month_name || `${monthNum}/${year}`}
+            </h2>
           </div>
-          <button onClick={onClose} style={{width:32,height:32,borderRadius:9,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
-            <Ic d={ICONS.x} stroke="#94a3b8" size={13}/>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500">
+            <FiX size={15} />
           </button>
         </div>
-        <div style={{display:"flex",alignItems:"center",padding:"16px 26px",background:"#f8fafc",borderBottom:"1px solid #f1f5f9",flexShrink:0}}>
-          {STEPS.map((s,i) => (
-            <React.Fragment key={s.n}>
-              <div onClick={()=>setStep(s.n)} style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer",userSelect:"none"}}>
-                <div style={{width:28,height:28,borderRadius:9,background:step===s.n?`linear-gradient(135deg,${ACCENT},#ea580c)`:step>s.n?"#22c55e":"#e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.25s",boxShadow:step===s.n?`0 4px 12px ${ACCENT}44`:"none"}}>
-                  {step>s.n?<Ic d={ICONS.check} stroke="#fff" size={12} sw={2.5}/>:<span style={{fontSize:11.5,fontWeight:900,color:step===s.n?"#fff":"#9ca3af"}}>{s.n}</span>}
-                </div>
-                <span style={{fontSize:12.5,fontWeight:step===s.n?800:500,color:step===s.n?"#111827":"#9ca3af",transition:"color 0.2s"}}>{s.label}</span>
+
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Spinner size={24} color={ACCENT} />
+            <p className="text-xs text-gray-400 font-medium">Loading payslip…</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="p-6">
+            <div className="flex items-start gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+              <FiAlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+
+        {!loading && data && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-100 rounded-xl">
+              <Avatar name={data.employee.name} size={44} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-gray-900">{data.employee.name}</p>
+                <p className="text-[11px] text-gray-500">
+                  {data.employee.employee_id} · {data.employee.designation || "—"} · {data.employee.department || "—"}
+                </p>
               </div>
-              {i<STEPS.length-1&&<div style={{flex:1,height:2,background:step>s.n?"#22c55e":"#e5e7eb",margin:"0 14px",borderRadius:2,transition:"background 0.3s"}}/>}
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hourly Rate</p>
+                <p className="text-sm font-black text-gray-800">{fmt(data.hourly_rate)}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Summary</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { l: "Working Days",    v: data.summary.working_days,    c: "#3b82f6" },
+                  { l: "Present Days",    v: data.summary.present_days,    c: "#22c55e" },
+                  { l: "Absent Days",     v: data.summary.absent_days,     c: "#ef4444" },
+                  { l: "Paid Leaves",     v: data.summary.paid_leaves,     c: "#8b5cf6" },
+                  { l: "Unpaid Leaves",   v: data.summary.unpaid_leaves,   c: "#f59e0b" },
+                  { l: "Late Days",       v: data.summary.late_days,       c: "#f97316" },
+                  { l: "Scheduled Hours", v: data.summary.scheduled_hours, c: "#6366f1" },
+                  { l: "Worked Hours",    v: data.summary.worked_hours,    c: "#06b6d4" },
+                  { l: "Shortfall Hours", v: data.summary.hour_shortfall,  c: "#dc2626" },
+                ].map(({ l, v, c }) => (
+                  <div key={l} className="bg-gray-50 border border-gray-100 rounded-lg p-2.5">
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{l}</p>
+                    <p className="text-base font-black" style={{ color: c }}>{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500" /> Earnings
+                </p>
+                <div className="space-y-1">
+                  {data.earnings.map((e, i) => (
+                    <div key={i} className="flex justify-between py-1.5 border-b border-gray-50">
+                      <span className="text-xs text-gray-600">{e.name}</span>
+                      <span className="text-xs font-bold text-gray-800">{fmt(e.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between pt-2.5 mt-1 border-t-2 border-green-100">
+                  <span className="text-xs font-bold text-green-700">Total Earnings</span>
+                  <span className="text-sm font-black text-green-700">{fmt(data.total_earnings)}</span>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500" /> Deductions
+                </p>
+                <div className="space-y-1">
+                  {data.deductions.map((d, i) => (
+                    <div key={i} className="flex justify-between py-1.5 border-b border-gray-50">
+                      <span className="text-xs text-gray-600">{d.name}</span>
+                      <span className="text-xs font-bold text-gray-800">{fmt(d.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between pt-2.5 mt-1 border-t-2 border-red-100">
+                  <span className="text-xs font-bold text-red-700">Total Deductions</span>
+                  <span className="text-sm font-black text-red-700">{fmt(data.total_deductions)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900 text-white">
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net Take Home</p>
+                <p className="text-2xl font-black">{fmt(data.net_pay)}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
+                <FiDollarSign size={22} className="text-orange-400" />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                <FiDownload size={13} /> Download PDF
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={sending || sent}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-60"
+                style={{ background: sent ? "#16a34a" : ACCENT }}
+              >
+                {sending ? <><Spinner size={12} />Sending…</> :
+                 sent ? <><FiCheck size={13} />Sent!</> :
+                        <><FiSend size={13} />Email Payslip</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EDIT / ASSIGN SALARY MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function EditSalaryModal({ employee, structures, onClose, onSaved }) {
+  const [structureId, setStructureId] = useState(employee.salary_structure_id || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSave = async () => {
+    setSaving(true); setError(null);
+    try {
+      if (structureId) {
+        const res = await fetch(`${BASE}/api/admin/employees/${employee.id}/assign-salary-structure`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ salary_structure_id: Number(structureId) }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || "Failed to assign structure");
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-orange-50">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Assign Salary Structure</h3>
+            <p className="text-[11px] text-gray-500">{getFullName(employee)} · {employee.employee_id}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white hover:bg-gray-100 flex items-center justify-center text-gray-500 border border-gray-200">
+            <FiX size={14} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+              <FiAlertTriangle size={13} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">
+              Salary Structure <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={structureId}
+              onChange={e => setStructureId(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 bg-white cursor-pointer"
+            >
+              <option value="">— Select a structure —</option>
+              {structures.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.grade} · {fmtShort(s.annual_ctc)}/yr)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-2">
+            <FiInfo size={13} className="text-blue-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-blue-700 leading-relaxed">
+              Assigning a salary structure determines how this employee's payslip is calculated each month.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !structureId}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white rounded-lg disabled:opacity-60"
+            style={{ background: ACCENT }}
+          >
+            {saving ? <><Spinner size={12} />Saving…</> : <><FiSave size={13} />Save</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STRUCTURE FORM MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function StructureFormModal({ editItem, components, deductions, onClose, onSaved }) {
+  const isEdit = !!editItem;
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [form, setForm] = useState({
+    name: editItem?.name || "",
+    grade: editItem?.grade || "basic",
+    annual_ctc: editItem?.annual_ctc || 480000,
+    monthly_ctc: editItem?.monthly_ctc || 40000,
+    components: editItem?.components?.map(c => ({
+      id: c.id, value: Number(c.pivot?.value || c.value || 0),
+      calculation_type: c.pivot?.calculation_type || c.calculation_type || "fixed",
+      sort_order: c.pivot?.sort_order || c.sort_order || 0,
+    })) || [],
+    deductions: editItem?.deductions?.map(d => ({
+      id: d.id, value: Number(d.pivot?.value || d.value || 0),
+      calculation_type: d.pivot?.calculation_type || d.calculation_type || "fixed",
+      sort_order: d.pivot?.sort_order || d.sort_order || 0,
+    })) || [],
+  });
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const toggleComp = (comp) => {
+    const exists = form.components.find(c => c.id === comp.id);
+    set("components", exists
+      ? form.components.filter(c => c.id !== comp.id)
+      : [...form.components, { id: comp.id, value: 0, calculation_type: comp.calculation_type, sort_order: form.components.length }]);
+  };
+  const toggleDed = (ded) => {
+    const exists = form.deductions.find(d => d.id === ded.id);
+    set("deductions", exists
+      ? form.deductions.filter(d => d.id !== ded.id)
+      : [...form.deductions, { id: ded.id, value: 0, calculation_type: ded.calculation_type, sort_order: form.deductions.length }]);
+  };
+  const updateComp = (id, key, val) => set("components", form.components.map(c => c.id === id ? { ...c, [key]: val } : c));
+  const updateDed = (id, key, val) => set("deductions", form.deductions.map(d => d.id === id ? { ...d, [key]: val } : d));
+
+  const totalEarnings = form.components.reduce((sum, c) => sum + Number(c.value || 0), 0);
+  const totalDeductions = form.deductions.reduce((sum, d) => sum + Number(d.value || 0), 0);
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = {
+        name: form.name,
+        grade: form.grade,
+        annual_ctc: Number(form.annual_ctc),
+        monthly_ctc: Number(form.monthly_ctc),
+        components: form.components,
+        deductions: form.deductions,
+      };
+      const url = isEdit ? `${BASE}/api/admin/salary-structures/${editItem.id}` : `${BASE}/api/admin/salary-structures`;
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Save failed");
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const STEPS = [{ n:1, label:"Basic" }, { n:2, label:"Earnings" }, { n:3, label:"Deductions" }];
+
+  return (
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-orange-50 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: ACCENT }}>
+              <FiLayers size={17} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">{isEdit ? "Edit" : "Create"} Salary Structure</h2>
+              <p className="text-[11px] text-gray-500">Define earnings + deductions template</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white hover:bg-gray-100 flex items-center justify-center text-gray-500 border border-gray-200">
+            <FiX size={15} />
+          </button>
+        </div>
+
+        <div className="flex items-center px-6 py-3 border-b border-gray-100 bg-gray-50 shrink-0">
+          {STEPS.map((s, i) => (
+            <React.Fragment key={s.n}>
+              <button
+                onClick={() => setStep(s.n)}
+                className="flex items-center gap-2 text-xs font-bold transition"
+                style={{ color: step === s.n ? ACCENT : step > s.n ? "#16a34a" : "#9ca3af" }}
+              >
+                <span
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                  style={{ background: step === s.n ? ACCENT : step > s.n ? "#16a34a" : "#e5e7eb" }}
+                >
+                  {step > s.n ? <FiCheck size={11} /> : s.n}
+                </span>
+                {s.label}
+              </button>
+              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-gray-200 mx-3" />}
             </React.Fragment>
           ))}
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
-          {err && <div style={{padding:"10px 14px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:9,fontSize:12,color:"#dc2626",fontWeight:600,marginBottom:14}}>{err}</div>}
-          {step===1 && (
-            <div style={{display:"flex",flexDirection:"column",gap:18}}>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+              <FiAlertTriangle size={13} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {step === 1 && (
+            <>
               <div>
-                <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:6}}>Structure Name <span style={{color:"#ef4444"}}>*</span></label>
-                <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Senior Developer Package"
-                  style={{width:"100%",padding:"11px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:13.5,fontWeight:600,color:"#111827",outline:"none",boxSizing:"border-box",fontFamily:"Nunito,sans-serif",transition:"border 0.15s"}}
-                  onFocus={e=>e.target.style.borderColor=ACCENT} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
+                <label className="block text-xs font-bold text-gray-600 mb-1.5">Structure Name <span className="text-red-500">*</span></label>
+                <input
+                  value={form.name}
+                  onChange={e => set("name", e.target.value)}
+                  placeholder="e.g. Junior Developer Package"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                />
               </div>
+
               <div>
-                <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:9}}>Salary Grade <span style={{color:"#ef4444"}}>*</span></label>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:11}}>
+                <label className="block text-xs font-bold text-gray-600 mb-2">Grade</label>
+                <div className="grid grid-cols-3 gap-2">
                   {["basic","medium","high"].map(g => {
-                    const cfg = GRADE_CFG[g]; const active = form.grade===g;
-                    const desc = {basic:"₹3L–6L CTC/yr\nEntry level",medium:"₹6L–10L CTC/yr\nMid level",high:"₹10L+ CTC/yr\nSenior level"};
+                    const active = form.grade === g;
+                    const cfg = GRADE_CFG[g];
                     return (
-                      <button key={g} onClick={()=>applyGrade(g)}
-                        style={{padding:"14px 10px",border:`2px solid ${active?cfg.color:cfg.border}`,borderRadius:14,background:active?cfg.bg:"#fafafa",cursor:"pointer",textAlign:"center",transition:"all 0.18s",boxShadow:active?`0 4px 14px ${cfg.color}22`:"none",transform:active?"scale(1.02)":"scale(1)"}}>
-                        <div style={{fontSize:14,fontWeight:900,color:active?cfg.color:"#374151",marginBottom:4}}>{cfg.label}</div>
-                        {desc[g].split("\n").map((l,i)=><div key={i} style={{fontSize:10.5,color:active?cfg.color:"#9ca3af",lineHeight:1.5}}>{l}</div>)}
+                      <button
+                        key={g}
+                        onClick={() => set("grade", g)}
+                        className="py-3 rounded-xl border-2 text-sm font-bold capitalize transition-all"
+                        style={{
+                          borderColor: active ? cfg.color : cfg.border,
+                          background: active ? cfg.bg : "#fafafa",
+                          color: active ? cfg.color : "#6b7280",
+                        }}
+                      >
+                        {g}
                       </button>
                     );
                   })}
                 </div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:6}}>Annual CTC</label>
-                  <div style={{position:"relative"}}>
-                    <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:12.5,color:"#9ca3af",fontWeight:600}}>₹</span>
-                    <input type="number" value={form.annual_ctc} onChange={e=>updateCTC(Number(e.target.value))}
-                      style={{width:"100%",padding:"11px 12px 11px 26px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:13.5,fontWeight:700,color:"#111827",outline:"none",boxSizing:"border-box",fontFamily:"Nunito,sans-serif"}}
-                      onFocus={e=>e.target.style.borderColor=ACCENT} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-                  </div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5">Annual CTC</label>
+                  <input
+                    type="number"
+                    value={form.annual_ctc}
+                    onChange={e => {
+                      const v = Number(e.target.value);
+                      setForm(p => ({ ...p, annual_ctc: v, monthly_ctc: Math.round(v / 12) }));
+                    }}
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-orange-400"
+                  />
                 </div>
-                <div style={{padding:"11px 16px",background:"linear-gradient(135deg,#f8fafc,#f1f5f9)",borderRadius:10,border:"1px solid #e5e7eb",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                  <div style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.5px"}}>Monthly CTC</div>
-                  <div style={{fontSize:22,fontWeight:900,color:"#111827",letterSpacing:"-0.5px"}}>{fmt(monthlyCTC)}</div>
-                  <div style={{fontSize:10.5,color:"#9ca3af",marginTop:2}}>per month</div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5">Monthly CTC</label>
+                  <input
+                    type="number"
+                    value={form.monthly_ctc}
+                    readOnly
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <p className="text-xs text-gray-500 bg-orange-50 border border-orange-100 rounded-lg p-3 flex items-center gap-2">
+                <FiInfo size={13} className="text-orange-500 shrink-0" />
+                Select earnings components and set their values.
+              </p>
+
+              {components.length === 0 ? (
+                <div className="text-center py-8 bg-amber-50 border border-amber-200 rounded-xl">
+                  <FiAlertTriangle size={22} className="text-amber-600 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-amber-800">No earning components available</p>
+                  <p className="text-[11px] text-amber-700 mt-1">Add master earnings first from the Master Data tab</p>
+                </div>
+              ) : (
+                components.map(comp => {
+                  const selected = form.components.find(c => c.id === comp.id);
+                  return (
+                    <div key={comp.id} className={`p-3 rounded-xl border-2 transition ${selected ? "border-orange-300 bg-orange-50/40" : "border-gray-100 bg-white"}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={!!selected}
+                          onChange={() => toggleComp(comp)}
+                          className="w-4 h-4 accent-orange-500 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-gray-800">{comp.name}</p>
+                          <p className="text-[10px] text-gray-400 capitalize">{comp.calculation_type?.replace(/_/g, " ")}</p>
+                        </div>
+                        {selected && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <input
+                              type="number"
+                              value={selected.value}
+                              onChange={e => updateComp(comp.id, "value", Number(e.target.value))}
+                              placeholder="0"
+                              className="w-24 px-2 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:border-orange-400 text-right"
+                            />
+                            <select
+                              value={selected.calculation_type || "fixed"}
+                              onChange={e => updateComp(comp.id, "calculation_type", e.target.value)}
+                              className="px-2 py-1 text-[10px] border border-gray-200 rounded-lg outline-none bg-white"
+                            >
+                              <option value="fixed">₹ Fixed</option>
+                              <option value="percentage_of_basic">% of Basic</option>
+                              <option value="percentage_of_gross">% of Gross</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              <div className="flex items-center justify-between p-3 bg-gray-900 rounded-xl text-white">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Monthly</span>
+                <span className="text-lg font-black">{fmt(totalEarnings)}</span>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <p className="text-xs text-gray-500 bg-orange-50 border border-orange-100 rounded-lg p-3 flex items-center gap-2">
+                <FiInfo size={13} className="text-orange-500 shrink-0" />
+                Select deduction components and set their values.
+              </p>
+
+              {deductions.length === 0 ? (
+                <div className="text-center py-8 bg-amber-50 border border-amber-200 rounded-xl">
+                  <FiAlertTriangle size={22} className="text-amber-600 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-amber-800">No deduction components available</p>
+                  <p className="text-[11px] text-amber-700 mt-1">Add master deductions first from the Master Data tab</p>
+                </div>
+              ) : (
+                deductions.map(ded => {
+                  const selected = form.deductions.find(d => d.id === ded.id);
+                  return (
+                    <div key={ded.id} className={`p-3 rounded-xl border-2 transition ${selected ? "border-red-300 bg-red-50/40" : "border-gray-100 bg-white"}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={!!selected}
+                          onChange={() => toggleDed(ded)}
+                          className="w-4 h-4 accent-red-500 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-gray-800">{ded.name}</p>
+                          <p className="text-[10px] text-gray-400 capitalize">{ded.calculation_type?.replace(/_/g, " ")}</p>
+                        </div>
+                        {selected && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <input
+                              type="number"
+                              value={selected.value}
+                              onChange={e => updateDed(ded.id, "value", Number(e.target.value))}
+                              placeholder="0"
+                              className="w-24 px-2 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:border-red-400 text-right"
+                            />
+                            <select
+                              value={selected.calculation_type || "fixed"}
+                              onChange={e => updateDed(ded.id, "calculation_type", e.target.value)}
+                              className="px-2 py-1 text-[10px] border border-gray-200 rounded-lg outline-none bg-white"
+                            >
+                              <option value="fixed">₹ Fixed</option>
+                              <option value="percentage_of_basic">% of Basic</option>
+                              <option value="percentage_of_gross">% of Gross</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              <div className="flex items-center justify-between p-3 bg-red-600 rounded-xl text-white">
+                <span className="text-xs font-bold uppercase tracking-wider">Total Deductions</span>
+                <span className="text-lg font-black">− {fmt(totalDeductions)}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900 text-white">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Net Take Home</span>
+                <span className="text-2xl font-black">{fmt(totalEarnings - totalDeductions)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100">
+              Cancel
+            </button>
+            {step > 1 && (
+              <button onClick={() => setStep(s => s - 1)} className="px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100">
+                ← Back
+              </button>
+            )}
+          </div>
+          {step < 3 ? (
+            <button
+              onClick={() => setStep(s => s + 1)}
+              disabled={step === 1 && !form.name.trim()}
+              className="px-5 py-2 text-sm font-bold text-white rounded-lg disabled:opacity-50"
+              style={{ background: ACCENT }}
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white rounded-lg disabled:opacity-60"
+              style={{ background: ACCENT }}
+            >
+              {saving ? <><Spinner size={12} />Saving…</> : <><FiSave size={13} />{isEdit ? "Update" : "Create"}</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIRM MODAL — reusable for all deletes
+// ════════════════════════════════════════════════════════════════════════════
+function ConfirmModal({ title, message, onConfirm, onClose, loading, confirmLabel = "Delete" }) {
+  return (
+    <div className="fixed inset-0 z-[950] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center mx-auto mb-4">
+            <FiAlertTriangle size={22} className="text-red-600" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900 mb-2">{title}</h3>
+          <p className="text-sm text-gray-500 leading-relaxed">{message}</p>
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-60">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {loading ? <><Spinner size={13} />Deleting…</> : <><FiTrash2 size={13} />{confirmLabel}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════════════════════════
+function Toast({ isOpen, title, message, isError, onClose }) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(onClose, 3200);
+    return () => clearTimeout(t);
+  }, [isOpen, onClose]);
+  if (!isOpen) return null;
+  const bg = isError ? "#dc2626" : "#059669";
+  const Icon = isError ? FiXCircle : FiCheckCircle;
+  return (
+    <div className="fixed top-6 right-6 z-[1000] max-w-sm" onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl flex items-stretch overflow-hidden" style={{ background: bg }}>
+        <div className="flex items-center justify-center px-4">
+          <Icon size={22} className="text-white" />
+        </div>
+        <div className="flex-1 py-3.5 pr-4">
+          <p className="text-sm font-bold text-white">{title}</p>
+          <p className="text-xs text-white/85 mt-0.5">{message}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STAT CARD
+// ════════════════════════════════════════════════════════════════════════════
+function StatCard({ Icon, iconBg, label, value, sub, subColor, trend }) {
+  return (
+    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: iconBg }}>
+        <Icon size={20} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{label}</p>
+        <p className="text-xl font-black text-gray-900 leading-tight">{value}</p>
+        {sub && <p className="text-[10.5px] font-semibold mt-0.5" style={{ color: subColor || "#9ca3af" }}>{sub}</p>}
+      </div>
+      {trend !== undefined && (
+        <div className="shrink-0 flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full"
+             style={{ color: trend > 0 ? "#16a34a" : "#dc2626", background: trend > 0 ? "#f0fdf4" : "#fef2f2" }}>
+          {trend > 0 ? "↑" : "↓"}{Math.abs(trend)}%
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MASTER FORM MODAL — Add/Edit for components & deductions
+// ════════════════════════════════════════════════════════════════════════════
+function MasterFormModal({ modal, type, saving, onSave, onClose }) {
+  const [form, setForm] = useState({
+    name: modal.item.name || "",
+    calculation_type: modal.item.calculation_type || "fixed",
+  });
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const isComponent = type === "component";
+  const color = isComponent ? "#10b981" : "#ef4444";
+  const label = isComponent ? "Earning Component" : "Deduction Component";
+
+  return (
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between"
+             style={{ background: isComponent ? "#f0fdf4" : "#fef2f2" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: color }}>
+              {isComponent ? <FiTrendingUp size={16} /> : <FiShield size={16} />}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">
+                {modal.mode === "edit" ? "Edit" : "Add"} {label}
+              </h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {modal.mode === "edit" ? `Updating #${modal.item.id}` : "Create a new master entry"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white hover:bg-gray-100 flex items-center justify-center text-gray-500 border border-gray-200">
+            <FiX size={14} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={form.name}
+              onChange={e => set("name", e.target.value)}
+              placeholder={isComponent ? "e.g. Internet Allowance" : "e.g. ESI"}
+              autoFocus
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">
+              Calculation Type <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { v: "fixed", l: "Fixed ₹" },
+                { v: "percentage_of_basic", l: "% of Basic" },
+                { v: "percentage_of_gross", l: "% of Gross" },
+              ].map(opt => (
+                <button
+                  key={opt.v}
+                  onClick={() => set("calculation_type", opt.v)}
+                  className="py-2.5 rounded-lg border-2 text-[11px] font-bold transition"
+                  style={{
+                    borderColor: form.calculation_type === opt.v ? color : "#e5e7eb",
+                    background: form.calculation_type === opt.v ? (isComponent ? "#f0fdf4" : "#fef2f2") : "#fff",
+                    color: form.calculation_type === opt.v ? color : "#6b7280",
+                  }}
+                >
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-2">
+            <FiInfo size={13} className="text-blue-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-blue-700 leading-relaxed">
+              {isComponent
+                ? "Earning components define what employees receive (Basic, HRA, Conveyance, etc.)"
+                : "Deduction components define what's cut from gross pay (PF, PT, ESI, etc.)"}
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-60">
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(form)}
+            disabled={saving || !form.name.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white rounded-lg disabled:opacity-60"
+            style={{ background: color }}
+          >
+            {saving ? <><Spinner size={12} />Saving…</> : <><FiSave size={13} />{modal.mode === "edit" ? "Update" : "Create"}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MASTER LIST CARD — Reusable for earnings & deductions with full CRUD
+// ════════════════════════════════════════════════════════════════════════════
+function MasterListCard({ title, Icon, color, items, loading, type, onChanged, showToast }) {
+  const [modal, setModal] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const endpoint = type === "component" ? "payroll-components" : "payroll-deductions";
+  const itemLabel = type === "component" ? "Earning Component" : "Deduction Component";
+
+  const handleSave = async (payload) => {
+    setSaving(true);
+    try {
+      const isEdit = modal.mode === "edit";
+      const url = isEdit
+        ? `${BASE}/api/admin/${endpoint}/${modal.item.id}`
+        : `${BASE}/api/admin/${endpoint}`;
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        let msg = data.message || "Save failed";
+        if (data.errors) msg = Object.values(data.errors).flat().join(" · ");
+        throw new Error(msg);
+      }
+      showToast("Success", `${itemLabel} ${isEdit ? "updated" : "created"} successfully`, false);
+      setModal(null);
+      onChanged();
+    } catch (err) {
+      showToast("Error", err.message, true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/${endpoint}/${confirm.id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Cannot delete this item");
+      showToast("Deleted", `${itemLabel} removed successfully`, false);
+      setConfirm(null);
+      onChanged();
+    } catch (err) {
+      showToast("Cannot Delete", err.message, true);
+      setConfirm(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+          <Icon size={15} style={{ color }} />
+          <span className="text-sm font-black text-gray-800">{title}</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}>
+            {items.length}
+          </span>
+          <button
+            onClick={() => setModal({ mode: "add", item: { name: "", calculation_type: "fixed" } })}
+            className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold text-white"
+            style={{ background: color }}
+          >
+            <FiPlus size={11} /> Add
+          </button>
+        </div>
+
+        <div className="p-4 space-y-2">
+          {loading ? (
+            [...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)
+          ) : items.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
+                <Icon size={20} className="text-gray-300" />
+              </div>
+              <p className="text-xs font-bold text-gray-500">No {title.toLowerCase()} yet</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Click "Add" to create your first entry</p>
+            </div>
+          ) : (
+            items.map(item => (
+              <div key={item.id}
+                   className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition group">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0"
+                     style={{ background: color }}>
+                  <Icon size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-800 truncate">{item.name}</p>
+                  <p className="text-[10px] text-gray-400 capitalize">
+                    {item.calculation_type?.replace(/_/g, " ")}
+                  </p>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  item.is_active ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"
+                }`}>
+                  {item.is_active ? "Active" : "Inactive"}
+                </span>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={() => setModal({ mode: "edit", item })}
+                    title="Edit"
+                    className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:text-orange-500 hover:border-orange-300 hover:bg-orange-50 flex items-center justify-center transition"
+                  >
+                    <FiEdit2 size={11} />
+                  </button>
+                  <button
+                    onClick={() => setConfirm(item)}
+                    title="Delete"
+                    className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-300 hover:bg-red-50 flex items-center justify-center transition"
+                  >
+                    <FiTrash2 size={11} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {modal && (
+        <MasterFormModal
+          modal={modal}
+          type={type}
+          saving={saving}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          title={`Delete ${itemLabel}?`}
+          message={`"${confirm.name}" will be permanently removed. If this is used in any salary structure, you'll need to remove it from those first.`}
+          confirmLabel="Delete"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════════════════════════════
+export default function EmployeeSalaryPage() {
+  const [activeTab, setActiveTab] = useState("salary");
+
+  const [employees, setEmployees] = useState([]);
+  const [structures, setStructures] = useState([]);
+  const [components, setComponents] = useState([]);
+  const [deductions, setDeductions] = useState([]);
+
+  const [loadingEmp, setLoadingEmp] = useState(true);
+  const [loadingStruct, setLoadingStruct] = useState(true);
+  const [loadingMasters, setLoadingMasters] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [dept, setDept] = useState("All");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortDir, setSortDir] = useState("asc");
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const now = new Date();
+  const [monthNum, setMonthNum] = useState(now.getMonth() + 1);
+  const [year] = useState(now.getFullYear());
+
+  const [viewEmp, setViewEmp] = useState(null);
+  const [editEmp, setEditEmp] = useState(null);
+
+  const [showStructureForm, setShowStructureForm] = useState(false);
+  const [editStructure, setEditStructure] = useState(null);
+  const [structureToDelete, setStructureToDelete] = useState(null);
+  const [deletingStruct, setDeletingStruct] = useState(false);
+
+  const [toast, setToast] = useState({ open: false, title: "", message: "", isError: false });
+  const showToast = (title, message, isError = false) => setToast({ open: true, title, message, isError });
+
+  // ─── Fetchers ──────────────────────────────────────────────────────
+  const fetchEmployees = useCallback(async () => {
+    setLoadingEmp(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/employees`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setEmployees(list);
+    } catch (err) { console.error(err); }
+    finally { setLoadingEmp(false); }
+  }, []);
+
+  const fetchStructures = useCallback(async () => {
+    setLoadingStruct(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/salary-structures`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      const list = data?.data?.data || data?.data || (Array.isArray(data) ? data : []);
+      setStructures(Array.isArray(list) ? list : []);
+    } catch (err) { console.error(err); }
+    finally { setLoadingStruct(false); }
+  }, []);
+
+  const fetchMasters = useCallback(async () => {
+    setLoadingMasters(true);
+    try {
+      const [cRes, dRes] = await Promise.all([
+        fetch(`${BASE}/api/admin/payroll-components`, { headers: getAuthHeaders() }),
+        fetch(`${BASE}/api/admin/payroll-deductions`, { headers: getAuthHeaders() }),
+      ]);
+      const cData = await cRes.json();
+      const dData = await dRes.json();
+      setComponents(Array.isArray(cData) ? cData : (cData?.data || []));
+      setDeductions(Array.isArray(dData) ? dData : (dData?.data || []));
+    } catch (err) { console.error(err); }
+    finally { setLoadingMasters(false); }
+  }, []);
+
+  useEffect(() => {
+    fetchEmployees();
+    fetchStructures();
+    fetchMasters();
+  }, [fetchEmployees, fetchStructures, fetchMasters]);
+
+  const stats = useMemo(() => {
+    const totalGross = employees.reduce((s, e) => s + (Number(e.salary_structure?.monthly_ctc) || 0), 0);
+    return {
+      totalEmployees: employees.length,
+      totalGross,
+      structuresCount: structures.length,
+      componentsCount: components.length,
+    };
+  }, [employees, structures, components]);
+
+  const filtered = useMemo(() => {
+    let list = employees.filter(e => {
+      const q = search.toLowerCase();
+      const name = getFullName(e).toLowerCase();
+      const matchQ = !q || name.includes(q) || (e.employee_id || "").toLowerCase().includes(q) || getRole(e).toLowerCase().includes(q);
+      const matchDept = dept === "All" || e.department?.name === dept;
+      return matchQ && matchDept;
+    });
+    return list.sort((a, b) => {
+      const av = String(a[sortBy] || "").toLowerCase();
+      const bv = String(b[sortBy] || "").toLowerCase();
+      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }, [employees, search, dept, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const paginated = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  useEffect(() => { setPage(1); }, [search, dept, rowsPerPage]);
+
+  const toggleSort = (col) => {
+    if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortBy(col); setSortDir("asc"); }
+  };
+  const toggleRow = (id) => setSelectedIds(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+  const toggleAll = () => {
+    if (selectedIds.size === paginated.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(paginated.map(e => e.id)));
+  };
+
+  // ─── Delete structure (custom confirm) ─────────────────────────────
+  const confirmDeleteStructure = async () => {
+    if (!structureToDelete) return;
+    setDeletingStruct(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/salary-structures/${structureToDelete.id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Delete failed");
+      showToast("Deleted", "Structure deleted successfully", false);
+      setStructureToDelete(null);
+      fetchStructures();
+    } catch (err) {
+      showToast("Delete Failed", err.message, true);
+      setStructureToDelete(null);
+    } finally {
+      setDeletingStruct(false);
+    }
+  };
+
+  // ─── Gate: Can we create a structure? ─────────────────────────────
+  const canCreateStructure = components.length > 0 && deductions.length > 0;
+  const structureGateMessage = (() => {
+    if (components.length === 0 && deductions.length === 0) return "Add at least one earning component and one deduction component in Master Data before creating a structure.";
+    if (components.length === 0) return "Add at least one earning component in Master Data before creating a structure.";
+    if (deductions.length === 0) return "Add at least one deduction component in Master Data before creating a structure.";
+    return "";
+  })();
+
+  const handleOpenNewStructure = () => {
+    if (!canCreateStructure) {
+      showToast("Cannot Create Structure", structureGateMessage, true);
+      setActiveTab("masters");
+      return;
+    }
+    setEditStructure(null);
+    setShowStructureForm(true);
+  };
+
+  const TABS = [
+    { key: "salary",     label: "Employee Salary",   Icon: FiUsers    },
+    { key: "structures", label: "Salary Structures", Icon: FiLayers   },
+    { key: "masters",    label: "Master Data",       Icon: FiSettings },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-black text-gray-900">Employee Salary</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Manage payroll, structures & compliance</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { fetchEmployees(); fetchStructures(); fetchMasters(); }}
+            className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50"
+          >
+            <FiRefreshCw size={13} /> Refresh
+          </button>
+          {activeTab === "structures" && (
+            <button
+              onClick={handleOpenNewStructure}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-60"
+              style={{ background: canCreateStructure ? ACCENT : "#9ca3af" }}
+            >
+              <FiPlus size={13} /> New Structure
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-white border border-gray-100 p-1 rounded-2xl w-fit shadow-sm">
+        {TABS.map(t => {
+          const active = activeTab === t.key;
+          const Icon = t.Icon;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition"
+              style={{ background: active ? ACCENT : "transparent", color: active ? "#fff" : "#6b7280" }}
+            >
+              <Icon size={13} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════
+          TAB 1: EMPLOYEE SALARY
+         ══════════════════════════════════════════════════════ */}
+      {activeTab === "salary" && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard Icon={FiUsers}     iconBg="#1e293b" label="Total Employees"   value={stats.totalEmployees}   sub="On payroll" trend={5} />
+            <StatCard Icon={FiDollarSign} iconBg="#16a34a" label="Monthly CTC"      value={fmtShort(stats.totalGross)} sub="Combined" subColor="#16a34a" trend={7} />
+            <StatCard Icon={FiLayers}    iconBg="#6366f1" label="Structures"        value={stats.structuresCount}  sub="Active templates" />
+            <StatCard Icon={FiCheckCircle} iconBg="#f97316" label="Components"     value={stats.componentsCount}  sub="Earnings master" />
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <FiUsers size={15} className="text-orange-500" />
+                <span className="text-sm font-black text-gray-800">Employee Salary List</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
+                  {filtered.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={monthNum}
+                  onChange={e => setMonthNum(Number(e.target.value))}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white cursor-pointer focus:border-orange-400"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>
+                      {new Date(2026, m - 1, 1).toLocaleString("en-US", { month: "long" })} {year}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={dept}
+                  onChange={e => setDept(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white cursor-pointer focus:border-orange-400"
+                >
+                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                </select>
+                <div className="relative">
+                  <FiSearch size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search…"
+                    className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-orange-400 w-48"
+                  />
                 </div>
               </div>
             </div>
-          )}
-          {step===2 && (
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{padding:"11px 14px",background:"linear-gradient(135deg,#fff7ed,#ffedd5)",borderRadius:10,border:"1px solid #fed7aa",fontSize:12,color:"#c2410c",display:"flex",alignItems:"center",gap:9}}>
-                <Ic d={ICONS.info} stroke={ACCENT} size={14}/>
-                <span>Toggle to include a component. Edit or delete components below.</span>
-              </div>
-              {loadingData ? (
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"30px 0",justifyContent:"center",color:"#9ca3af",fontSize:12.5}}><Spinner size={14} color={ACCENT}/> Loading…</div>
-              ) : allComponents.length===0 ? (
-                <div style={{textAlign:"center",padding:"30px 0",color:"#9ca3af",border:"2px dashed #e5e7eb",borderRadius:12}}><div style={{fontSize:22,marginBottom:6}}>📦</div><div style={{fontSize:12.5,fontWeight:700}}>No components yet.</div></div>
+
+            <div className="overflow-x-auto">
+              {loadingEmp ? (
+                <div className="p-6 space-y-2">
+                  {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+                </div>
+              ) : paginated.length === 0 ? (
+                <div className="text-center py-16">
+                  <FiUsers size={32} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-gray-500">No employees found</p>
+                </div>
               ) : (
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {allComponents.map((comp,idx) => (
-                    <div key={comp.id}>
-                      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
-                        <Toggle enabled={!!selComps[comp.id]} onChange={()=>toggleComp(comp)} size="sm"/>
-                        <span style={{fontSize:11.5,fontWeight:700,color:selComps[comp.id]?"#111827":"#9ca3af"}}>{selComps[comp.id]?"Included":"Not included"}</span>
-                      </div>
-                      <ComponentCard comp={comp} idx={idx} onEditApi={handleEditCompApi} onDeleteApi={handleDeleteCompApi} deleting={deletingComp}/>
-                      {selComps[comp.id] && (
-                        <div style={{padding:"10px 14px",background:"#fff7ed",borderRadius:"0 0 11px 11px",border:"1px solid #fde68a",borderTop:"none",display:"flex",gap:10}}>
-                          <div style={{flex:1}}>
-                            <label style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,display:"block",marginBottom:4}}>Monthly Value (₹)</label>
-                            <div style={{position:"relative"}}><span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#9ca3af"}}>₹</span>
-                            <input type="number" value={selComps[comp.id].value} onChange={e=>updateSelComp(comp.id,"value",e.target.value)} style={{width:"100%",padding:"7px 10px 7px 22px",border:"1.5px solid #fde68a",borderRadius:8,fontSize:13,fontWeight:700,outline:"none",fontFamily:"Nunito,sans-serif",boxSizing:"border-box"}}/></div>
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-3 w-10">
+                        <input type="checkbox"
+                          checked={paginated.length > 0 && selectedIds.size === paginated.length}
+                          onChange={toggleAll}
+                          className="w-3.5 h-3.5 accent-orange-500 cursor-pointer" />
+                      </th>
+                      {[
+                        { l: "Employee ID", c: "employee_id" },
+                        { l: "Employee",    c: "firstname"   },
+                        { l: "Department",  c: null          },
+                        { l: "Role",        c: null          },
+                        { l: "Structure",   c: null          },
+                        { l: "Status",      c: null          },
+                        { l: "",            c: null          },
+                      ].map(({ l, c }, i) => (
+                        <th key={i}
+                            onClick={c ? () => toggleSort(c) : undefined}
+                            className={`px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${c ? "cursor-pointer select-none hover:text-gray-700" : ""}`}>
+                          {l}
+                          {c && sortBy === c && (
+                            <FiChevronDown size={9} className="inline ml-1"
+                              style={{ transform: sortDir === "desc" ? "rotate(180deg)" : "none" }} />
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.map(emp => {
+                      const name = getFullName(emp);
+                      const struct = emp.salary_structure;
+                      return (
+                        <tr key={emp.id} className="border-b border-gray-50 hover:bg-orange-50/30 transition">
+                          <td className="px-4 py-3">
+                            <input type="checkbox"
+                              checked={selectedIds.has(emp.id)}
+                              onChange={() => toggleRow(emp.id)}
+                              className="w-3.5 h-3.5 accent-orange-500 cursor-pointer" />
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono font-bold text-gray-500">
+                            {emp.employee_id || `EMP-${emp.id}`}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={name} size={32} />
+                              <div>
+                                <p className="text-xs font-bold text-gray-800 truncate">{name}</p>
+                                <p className="text-[10px] text-gray-400 truncate">{emp.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3"><DeptBadge dept={emp.department?.name} /></td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{emp.designation?.name || "—"}</td>
+                          <td className="px-4 py-3">
+                            {struct ? (
+                              <div className="flex items-center gap-1.5">
+                                <FiLayers size={11} className="text-orange-500" />
+                                <span className="text-xs font-semibold text-gray-700 truncate max-w-[140px]">{struct.name}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 font-bold">
+                                Not assigned
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={emp.status === "active" ? "Paid" : "Unpaid"} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setViewEmp(emp)}
+                                title="View Payslip"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-orange-500 hover:border-orange-300 hover:bg-orange-50 transition">
+                                <FiEye size={12} />
+                              </button>
+                              <button
+                                onClick={() => setEditEmp(emp)}
+                                title="Assign Structure"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition">
+                                <FiEdit2 size={12} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <p className="text-[11px] text-gray-500 font-medium">
+                Showing <strong className="text-gray-800">{filtered.length === 0 ? 0 : Math.min((page - 1) * rowsPerPage + 1, filtered.length)}</strong>–
+                <strong className="text-gray-800">{Math.min(page * rowsPerPage, filtered.length)}</strong> of
+                <strong className="text-gray-800"> {filtered.length}</strong>
+              </p>
+              <div className="flex items-center gap-1">
+                <select value={rowsPerPage} onChange={e => setRowsPerPage(Number(e.target.value))}
+                  className="text-[11px] border border-gray-200 rounded-md px-2 py-1 outline-none bg-white cursor-pointer">
+                  {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
+                </select>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                  className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40">
+                  <FiChevronLeft size={13} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .slice(Math.max(0, page - 3), page + 2)
+                  .map(n => (
+                    <button key={n} onClick={() => setPage(n)}
+                      className="w-7 h-7 rounded-md text-[11px] font-bold transition"
+                      style={{
+                        background: n === page ? ACCENT : "#fff",
+                        color: n === page ? "#fff" : "#6b7280",
+                        border: `1px solid ${n === page ? ACCENT : "#e5e7eb"}`,
+                      }}>
+                      {n}
+                    </button>
+                  ))}
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                  className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40">
+                  <FiChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          TAB 2: SALARY STRUCTURES
+         ══════════════════════════════════════════════════════ */}
+      {activeTab === "structures" && (
+        <>
+          {!canCreateStructure && (
+            <div className="flex items-start gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <FiAlertTriangle size={18} className="text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-black text-amber-900">Before creating a structure…</p>
+                <p className="text-xs text-amber-700 mt-1 leading-relaxed">{structureGateMessage}</p>
+                <button onClick={() => setActiveTab("masters")}
+                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700">
+                  <FiSettings size={11} /> Go to Master Data
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-100 rounded-2xl">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0" style={{ background: ACCENT }}>
+              <FiLayers size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-black text-orange-900">Salary Structure Templates</p>
+              <p className="text-xs text-orange-700 mt-0.5">
+                Reusable packages you can assign to employees. Uses live payroll components + deductions.
+              </p>
+            </div>
+          </div>
+
+          {loadingStruct ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-48 bg-white rounded-2xl border border-gray-100 animate-pulse" />
+              ))}
+            </div>
+          ) : structures.length === 0 ? (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
+                <FiLayers size={26} className="text-gray-300" />
+              </div>
+              <p className="text-sm font-bold text-gray-600">No salary structures yet</p>
+              <p className="text-xs text-gray-400 mt-1">Click "New Structure" to create your first template</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {structures.map(s => {
+                const cfg = GRADE_CFG[(s.grade || "basic").toLowerCase()] || GRADE_CFG.basic;
+                return (
+                  <div key={s.id} className="bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-lg transition-all"
+                       style={{ borderColor: cfg.border }}>
+                    <div className="p-4" style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}>
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-black text-gray-900 truncate">{s.name}</p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <GradeBadge grade={s.grade} />
+                            <span className="text-[10px] text-gray-500 font-semibold">
+                              {s.components?.length || 0} earnings · {s.deductions?.length || 0} deductions
+                            </span>
                           </div>
-                          <div style={{flex:1}}>
-                            <label style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,display:"block",marginBottom:4}}>Calculation Type</label>
-                            <select value={selComps[comp.id].calculation_type} onChange={e=>updateSelComp(comp.id,"calculation_type",e.target.value)} style={{width:"100%",padding:"7px 10px",border:"1.5px solid #fde68a",borderRadius:8,fontSize:12,fontWeight:600,outline:"none",fontFamily:"Nunito,sans-serif",background:"#fff",cursor:"pointer"}}>
-                              {CALC_TYPES.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={() => { setEditStructure(s); setShowStructureForm(true); }}
+                            className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-orange-500 hover:border-orange-300">
+                            <FiEdit2 size={11} />
+                          </button>
+                          <button
+                            onClick={() => setStructureToDelete(s)}
+                            className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-red-500 hover:border-red-300">
+                            <FiTrash2 size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                        <div>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Annual CTC</p>
+                          <p className="text-lg font-black text-gray-900">{fmtShort(s.annual_ctc)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Monthly</p>
+                          <p className="text-sm font-black" style={{ color: cfg.color }}>{fmt(s.monthly_ctc)}</p>
+                        </div>
+                      </div>
+
+                      {s.components?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Earnings</p>
+                          <div className="space-y-1">
+                            {s.components.slice(0, 3).map(c => (
+                              <div key={c.id} className="flex items-center justify-between text-[11px]">
+                                <span className="text-gray-600 truncate">{c.name}</span>
+                                <span className="font-bold text-gray-800 shrink-0 ml-2">
+                                  {c.pivot?.calculation_type === "fixed" ? fmt(c.pivot.value)
+                                    : c.pivot?.calculation_type === "percentage_of_basic" ? `${c.pivot.value}% of Basic`
+                                    : c.pivot?.calculation_type === "percentage_of_gross" ? `${c.pivot.value}% of Gross`
+                                    : fmt(c.pivot?.value || 0)}
+                                </span>
+                              </div>
+                            ))}
+                            {s.components.length > 3 && <p className="text-[10px] text-gray-400">+{s.components.length - 3} more</p>}
                           </div>
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={()=>setShowAddComp(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"11px 0",background:"#fafafa",border:`2px dashed ${ACCENT}55`,borderRadius:12,fontSize:13,fontWeight:700,color:ACCENT,cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>
-                <Ic d={ICONS.plus} stroke={ACCENT} size={15}/> Add New Component
-              </button>
-              <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontSize:10.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Total Monthly</div><div style={{fontSize:24,fontWeight:900,color:"#fff",letterSpacing:"-0.8px"}}>{fmt(totalEarnings)}</div></div>
-                <div style={{textAlign:"right"}}><div style={{fontSize:10.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Annual CTC</div><div style={{fontSize:17,fontWeight:800,color:ACCENT}}>{fmt(totalEarnings*12)}</div></div>
-              </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-          {step===3 && (
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#374151",marginBottom:2}}>Statutory Deductions</div>
-              {loadingData ? (
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"30px 0",justifyContent:"center",color:"#9ca3af",fontSize:12.5}}><Spinner size={14} color="#dc2626"/> Loading…</div>
-              ) : allDeductions.length===0 ? (
-                <div style={{textAlign:"center",padding:"30px 0",color:"#9ca3af",border:"2px dashed #e5e7eb",borderRadius:12}}><div style={{fontSize:22,marginBottom:6}}>🛡️</div><div style={{fontSize:12.5,fontWeight:700}}>No deductions yet.</div></div>
-              ) : (
-                allDeductions.map(ded => (
-                  <div key={ded.id}>
-                    <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
-                      <Toggle enabled={!!selDeds[ded.id]} onChange={()=>toggleDed(ded)} size="sm"/>
-                      <span style={{fontSize:11.5,fontWeight:700,color:selDeds[ded.id]?"#111827":"#9ca3af"}}>{selDeds[ded.id]?"Included":"Not included"}</span>
-                    </div>
-                    <DeductionCard ded={ded} onToggleApi={handleToggleDedApi} onEditApi={handleEditDedApi} onDeleteApi={handleDeleteDedApi} deleting={deletingDed}/>
-                    {selDeds[ded.id] && (
-                      <div style={{padding:"10px 14px",background:"#fff7ed",borderRadius:"0 0 11px 11px",border:"1px solid #fde68a",borderTop:"none",display:"flex",gap:10}}>
-                        <div style={{flex:1}}>
-                          <label style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,display:"block",marginBottom:4}}>Monthly Value (₹)</label>
-                          <div style={{position:"relative"}}><span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#9ca3af"}}>₹</span>
-                          <input type="number" value={selDeds[ded.id].value} onChange={e=>updateSelDed(ded.id,"value",e.target.value)} style={{width:"100%",padding:"7px 10px 7px 22px",border:"1.5px solid #fde68a",borderRadius:8,fontSize:13,fontWeight:700,outline:"none",fontFamily:"Nunito,sans-serif",boxSizing:"border-box"}}/></div>
-                        </div>
-                        <div style={{flex:1}}>
-                          <label style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,display:"block",marginBottom:4}}>Calculation Type</label>
-                          <select value={selDeds[ded.id].calculation_type} onChange={e=>updateSelDed(ded.id,"calculation_type",e.target.value)} style={{width:"100%",padding:"7px 10px",border:"1.5px solid #fde68a",borderRadius:8,fontSize:12,fontWeight:600,outline:"none",fontFamily:"Nunito,sans-serif",background:"#fff",cursor:"pointer"}}>
-                            {CALC_TYPES.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-              <button onClick={()=>setShowAddDed(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"11px 0",background:"#fafafa",border:"2px dashed #fecaca",borderRadius:12,fontSize:13,fontWeight:700,color:"#dc2626",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>
-                <Ic d={ICONS.plus} stroke="#dc2626" size={15}/> Add New Deduction
-              </button>
-              <div style={{borderRadius:14,overflow:"hidden",border:"1px solid #f1f5f9",marginTop:4}}>
-                <div style={{padding:"11px 16px",background:"#f8fafc",borderBottom:"1px solid #f1f5f9"}}><span style={{fontSize:11,fontWeight:800,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.6px"}}>Monthly Pay Summary</span></div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:12.5,color:"#6b7280"}}>Gross Earnings</span><span style={{fontSize:13,fontWeight:900,color:"#111827"}}>{fmt(totalEarnings)}</span></div>
-                {allDeductions.filter(d=>selDeds[d.id]).map(d=>(
-                  <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:12.5,color:"#6b7280"}}>{d.name}</span><span style={{fontSize:13,fontWeight:700,color:"#dc2626"}}>−{fmt(selDeds[d.id].value)}</span></div>
-                ))}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:"linear-gradient(135deg,#1e293b,#0f172a)"}}><span style={{fontSize:14,fontWeight:700,color:"#94a3b8"}}>Net Take Home</span><span style={{fontSize:20,fontWeight:900,color:"#fff"}}>{fmt(netMonthly)}</span></div>
-              </div>
-            </div>
-          )}
-        </div>
-        <div style={{padding:"15px 26px",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fafafa",borderRadius:"0 0 22px 22px",flexShrink:0}}>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={onClose} style={{padding:"9px 20px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>Cancel</button>
-            {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{padding:"9px 20px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>← Back</button>}
-          </div>
-          {step<3
-            ?<button onClick={()=>setStep(s=>s+1)} disabled={step===1&&!form.name.trim()} style={{padding:"10px 24px",background:step===1&&!form.name.trim()?"#d1d5db":`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:step===1&&!form.name.trim()?"not-allowed":"pointer",fontFamily:"Nunito,sans-serif"}}>Next Step →</button>
-            :<button onClick={handleSave} disabled={saving} style={{padding:"10px 24px",background:saving?"#d1d5db":`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:saving?"not-allowed":"pointer",fontFamily:"Nunito,sans-serif",display:"flex",alignItems:"center",gap:8}}>
-              {saving?<><Spinner size={13}/>&nbsp;Saving…</>:<><Ic d={ICONS.check} stroke="#fff" size={13} sw={2.5}/>{isEdit?"Update Structure":"Save Structure"}</>}
-            </button>}
-        </div>
-      </div>
-    </div>
-    {showAddComp && <AddComponentModal onClose={()=>setShowAddComp(false)} onAdd={handleAddCompDone}/>}
-    {showAddDed  && <AddDeductionModal onClose={()=>setShowAddDed(false)}  onAdd={handleAddDedDone}/>}
-    </>
-  );
-}
+        </>
+      )}
 
-// ════════════════════════════════════════════════════════════════════════════
-// ── PAYROLL SETTINGS PANEL
-// ════════════════════════════════════════════════════════════════════════════
-function PayrollSettingsPanel() {
-  const [components, setComponents] = useState([]);
-  const [deductions, setDeductions] = useState([]);
-  const [loadC, setLoadC]           = useState(true);
-  const [loadD, setLoadD]           = useState(true);
-  const [showAddComp, setShowAddComp] = useState(false);
-  const [showAddDed,  setShowAddDed]  = useState(false);
-  const [deletingComp, setDeletingComp] = useState(null);
-  const [deletingDed,  setDeletingDed]  = useState(null);
-
-  const fetchC = async () => { setLoadC(true); try { const d=await api.getComponents(); setComponents(Array.isArray(d)?d:[]); } catch{} setLoadC(false); };
-  const fetchD = async () => { setLoadD(true); try { const d=await api.getDeductions(); setDeductions(Array.isArray(d)?d:[]); } catch{} setLoadD(false); };
-  useEffect(()=>{ fetchC(); fetchD(); },[]);
-
-  const handleEditComp = async (id, draft) => {
-    const res = await api.updateComponent(id, { name: draft.name, calculation_type: draft.calculation_type });
-    if (res.data) setComponents(prev=>prev.map(c=>c.id===id?res.data:c));
-  };
-  const handleDeleteComp = async (id) => {
-    setDeletingComp(id);
-    await api.deleteComponent(id);
-    setComponents(prev=>prev.filter(c=>c.id!==id));
-    setDeletingComp(null);
-  };
-  const handleToggleDed = async (ded) => {
-    const updated = { ...ded, is_active: !ded.is_active };
-    setDeductions(prev=>prev.map(d=>d.id===ded.id?updated:d));
-    try { await api.updateDeduction(ded.id, { is_active: !ded.is_active }); }
-    catch { setDeductions(prev=>prev.map(d=>d.id===ded.id?ded:d)); }
-  };
-  const handleEditDed = async (id, draft) => {
-    const res = await api.updateDeduction(id, { name: draft.name, calculation_type: draft.calculation_type, is_active: draft.is_active });
-    if (res.data) setDeductions(prev=>prev.map(d=>d.id===id?res.data:d));
-  };
-  const handleDeleteDed = async (id) => {
-    setDeletingDed(id);
-    await api.deleteDeduction(id);
-    setDeductions(prev=>prev.filter(d=>d.id!==id));
-    setDeletingDed(null);
-  };
-
-  return (
-    <>
-    <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-      <div style={{padding:"16px 22px",borderBottom:"1px solid #f3f4f6",background:"linear-gradient(135deg,#fafafa,#f3f4f6)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:38,height:38,borderRadius:11,background:"linear-gradient(135deg,#1e293b,#374151)",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.settings} stroke={ACCENT} size={16}/></div>
-          <div><div style={{fontSize:15,fontWeight:900,color:"#111827"}}>Payroll Configuration</div><div style={{fontSize:11.5,color:"#9ca3af",marginTop:1}}>Manage components, rates & compliance</div></div>
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setShowAddComp(true)} style={{display:"flex",alignItems:"center",gap:7,padding:"9px 16px",background:"#fff7ed",border:`1.5px solid ${ACCENT}44`,borderRadius:10,fontSize:12.5,fontWeight:800,color:ACCENT,cursor:"pointer",fontFamily:"Nunito,sans-serif"}}><Ic d={ICONS.plus} stroke={ACCENT} size={13}/> Add Component</button>
-          <button onClick={()=>setShowAddDed(true)} style={{display:"flex",alignItems:"center",gap:7,padding:"9px 16px",background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,fontSize:12.5,fontWeight:800,color:"#dc2626",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}><Ic d={ICONS.plus} stroke="#dc2626" size={13}/> Add Deduction</button>
-        </div>
-      </div>
-      <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:22}}>
-        <div>
-          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:13}}>
-            <div style={{width:28,height:28,borderRadius:8,background:ACCENT,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.tag} stroke="#fff" size={13}/></div>
-            <span style={{fontSize:13,fontWeight:800,color:"#374151"}}>Payroll Components (Earnings)</span>
-            <div style={{flex:1,height:1.5,background:"linear-gradient(90deg,#f1f5f9,transparent)"}}/>
-          </div>
-          {loadC ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"28px 0",justifyContent:"center",color:"#9ca3af",fontSize:12.5}}><Spinner size={14} color={ACCENT}/> Loading…</div>
-            : components.length===0 ? <div style={{textAlign:"center",padding:"26px 0",color:"#9ca3af",border:"2px dashed #e5e7eb",borderRadius:12}}><div style={{fontSize:20,marginBottom:5}}>📦</div><div style={{fontSize:12.5,fontWeight:700}}>No components yet.</div></div>
-            : <div style={{display:"flex",flexDirection:"column",gap:8}}>{components.map((comp,idx)=><ComponentCard key={comp.id} comp={comp} idx={idx} onEditApi={handleEditComp} onDeleteApi={handleDeleteComp} deleting={deletingComp}/>)}</div>}
-        </div>
-        <div>
-          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:13}}>
-            <div style={{width:28,height:28,borderRadius:8,background:"#dc2626",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.shield} stroke="#fff" size={13}/></div>
-            <span style={{fontSize:13,fontWeight:800,color:"#374151"}}>Statutory Deductions</span>
-            <div style={{flex:1,height:1.5,background:"linear-gradient(90deg,#f1f5f9,transparent)"}}/>
-          </div>
-          {loadD ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"28px 0",justifyContent:"center",color:"#9ca3af",fontSize:12.5}}><Spinner size={14} color="#dc2626"/> Loading…</div>
-            : deductions.length===0 ? <div style={{textAlign:"center",padding:"26px 0",color:"#9ca3af",border:"2px dashed #e5e7eb",borderRadius:12}}><div style={{fontSize:20,marginBottom:5}}>🛡️</div><div style={{fontSize:12.5,fontWeight:700}}>No deductions yet.</div></div>
-            : <div style={{display:"flex",flexDirection:"column",gap:10}}>{deductions.map(ded=><DeductionCard key={ded.id} ded={ded} onToggleApi={handleToggleDed} onEditApi={handleEditDed} onDeleteApi={handleDeleteDed} deleting={deletingDed}/>)}</div>}
-        </div>
-        <div style={{padding:"13px 16px",background:"linear-gradient(135deg,#fff7ed,#ffedd5)",borderRadius:11,border:"1px solid #fed7aa",display:"flex",alignItems:"center",gap:12}}>
-          <Ic d={ICONS.info} stroke={ACCENT} size={16}/>
-          <div style={{fontSize:12,color:"#c2410c",lineHeight:1.7}}>
-            <strong>{components.length} component{components.length!==1?"s":""}</strong> · <strong>{deductions.filter(d=>d.is_active).length} active deduction{deductions.filter(d=>d.is_active).length!==1?"s":""}</strong> · Toggle to activate/deactivate.
-          </div>
-        </div>
-      </div>
-    </div>
-    {showAddComp && <AddComponentModal onClose={()=>setShowAddComp(false)} onAdd={c=>{setComponents(prev=>[...prev,c]);setShowAddComp(false);}}/>}
-    {showAddDed  && <AddDeductionModal onClose={()=>setShowAddDed(false)}  onAdd={d=>{setDeductions(prev=>[...prev,d]);setShowAddDed(false);}}/>}
-    </>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// ── SALARY STRUCTURES SECTION
-// ════════════════════════════════════════════════════════════════════════════
-function SalaryStructuresSection({ showAddStructure, setShowAddStructure, editStructure, setEditStructure }) {
-  const [structures, setStructures] = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [deletingId, setDeletingId] = useState(null);
-
-  const fetchStructures = async () => {
-    setLoading(true);
-    try { const d=await api.getStructures(); setStructures(d.data||[]); } catch {}
-    setLoading(false);
-  };
-  useEffect(()=>{ fetchStructures(); },[]);
-
-  const handleSave  = async () => { await fetchStructures(); };
-  const handleDelete = async (id) => {
-    if (!confirm("Delete this salary structure?")) return;
-    setDeletingId(id);
-    await api.deleteStructure(id);
-    setStructures(prev=>prev.filter(s=>s.id!==id));
-    setDeletingId(null);
-  };
-
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,padding:"80px 0",color:"#9ca3af",fontSize:14}}><Spinner size={20} color={ACCENT}/> Loading…</div>;
-
-  const gradeCounts = { basic:0, medium:0, high:0 };
-  const gradeCTC    = { basic:0, medium:0, high:0 };
-  structures.forEach(s=>{ gradeCounts[s.grade]=(gradeCounts[s.grade]||0)+1; gradeCTC[s.grade]=(gradeCTC[s.grade]||0)+parseFloat(s.annual_ctc||0); });
-
-  return (
-    <>
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <div style={{padding:"14px 18px",background:"linear-gradient(135deg,#fff7ed,#ffedd5)",borderRadius:14,border:"1px solid #fed7aa",display:"flex",alignItems:"center",gap:13}}>
-        <div style={{width:40,height:40,borderRadius:12,background:`linear-gradient(135deg,${ACCENT},#ea580c)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic d={ICONS.layers} stroke="#fff" size={18}/></div>
-        <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:900,color:"#92400e"}}>Salary Structure Templates</div><div style={{fontSize:12,color:"#c2410c",marginTop:2,fontWeight:600}}>Create reusable compensation packages by grade.</div></div>
-        <button onClick={()=>{setEditStructure(null);setShowAddStructure(true);}} style={{flexShrink:0,display:"flex",alignItems:"center",gap:7,padding:"9px 18px",background:`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}><Ic d={ICONS.plus} stroke="#fff" size={14}/> New Structure</button>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-        {["basic","medium","high"].map(g=>{
-          const cfg = GRADE_CFG[g]; const count = gradeCounts[g]||0; const avgCTC = count ? Math.round(gradeCTC[g]/count) : 0;
-          return (
-            <div key={g} style={{background:"#fff",borderRadius:13,border:`1.5px solid ${cfg.border}`,padding:"15px 18px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
-                <div style={{padding:"3px 12px",borderRadius:99,background:cfg.bg,border:`1.5px solid ${cfg.border}`,fontSize:12.5,fontWeight:900,color:cfg.color}}>{cfg.label} Grade</div>
-                <span style={{fontSize:11,color:"#9ca3af",fontWeight:600}}>{count} package{count!==1?"s":""}</span>
-              </div>
-              <div style={{fontSize:22,fontWeight:900,color:"#111827",letterSpacing:"-0.5px"}}>{avgCTC?fmtShort(avgCTC):"—"}</div>
-              <div style={{fontSize:11,color:"#9ca3af",marginTop:3,fontWeight:600}}>Avg annual CTC</div>
-            </div>
-          );
-        })}
-      </div>
-      {structures.length===0 ? (
-        <div style={{padding:"70px 0",textAlign:"center",color:"#9ca3af",background:"#fff",borderRadius:16,border:"2px dashed #e5e7eb"}}><div style={{fontSize:40,marginBottom:12}}>📦</div><div style={{fontSize:14,fontWeight:800,marginBottom:7,color:"#374151"}}>No salary structures yet</div></div>
-      ) : (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:14}}>
-          {structures.map(ss=>{
-            const cfg = GRADE_CFG[ss.grade]||GRADE_CFG.basic;
-            const monthly = parseFloat(ss.monthly_ctc)||0; const annual = parseFloat(ss.annual_ctc)||0;
-            const comps = ss.components||[]; const deds = ss.deductions||[];
-            const totalCompsVal = comps.reduce((s,c)=>s+parseFloat(c.pivot?.value||0),0);
-            const totalDedsVal  = deds.reduce((s,d)=>s+parseFloat(d.pivot?.value||0),0);
-            const net = totalCompsVal - totalDedsVal;
-            return (
-              <div key={ss.id} className="ss-card" style={{background:"#fff",borderRadius:16,border:`1.5px solid ${cfg.border}`,overflow:"hidden"}}>
-                <div style={{background:`linear-gradient(135deg,${cfg.bg},${cfg.bg}dd)`,padding:"15px 18px",borderBottom:`1px solid ${cfg.border}`}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
-                    <div><div style={{fontSize:14,fontWeight:900,color:cfg.color,marginBottom:4}}>{ss.name}</div><div style={{display:"flex",alignItems:"center",gap:7}}><GradeBadge grade={ss.grade}/><span style={{fontSize:10.5,color:"#9ca3af",fontWeight:600}}>{ss.created_at?.slice(0,10)}</span></div></div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button className="icon-btn" onClick={()=>{setEditStructure(ss);setShowAddStructure(true);}} style={{width:28,height:28,background:"#fff",border:"1px solid #e5e7eb",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Ic d={ICONS.edit} stroke="#6b7280" size={12}/></button>
-                      <button className="icon-btn" onClick={()=>handleDelete(ss.id)} disabled={deletingId===ss.id} style={{width:28,height:28,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:deletingId===ss.id?0.5:1}}>
-                        {deletingId===ss.id?<Spinner size={11} color="#dc2626"/>:<Ic d={ICONS.trash} stroke="#dc2626" size={12}/>}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div style={{padding:"13px 18px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:13,padding:"9px 13px",background:"#f8fafc",borderRadius:10}}>
-                    <div><div style={{fontSize:10,color:"#9ca3af",fontWeight:700,textTransform:"uppercase"}}>ANNUAL CTC</div><div style={{fontSize:20,fontWeight:900,color:"#111827"}}>{fmtShort(annual)}</div></div>
-                    <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#9ca3af",fontWeight:700,textTransform:"uppercase"}}>MONTHLY</div><div style={{fontSize:17,fontWeight:800,color:cfg.color}}>{fmt(monthly)}</div></div>
-                  </div>
-                  {comps.map((c,idx)=>(
-                    <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",background:"#fafafa",borderRadius:7,marginBottom:4}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:compColor(idx)}}/><span style={{fontSize:10.5,color:"#9ca3af",fontWeight:600}}>{c.name}</span></div>
-                      <span style={{fontSize:11,fontWeight:800,color:compColor(idx)}}>{fmt(parseFloat(c.pivot?.value||0))}</span>
-                    </div>
-                  ))}
-                  {deds.length>0 && deds.map(d=>(
-                    <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",background:"#fef9f9",borderRadius:7,marginBottom:4}}>
-                      <span style={{fontSize:10.5,color:"#9ca3af",fontWeight:600}}>{d.name}</span>
-                      <span style={{fontSize:11,fontWeight:800,color:"#dc2626"}}>−{fmt(parseFloat(d.pivot?.value||0))}</span>
-                    </div>
-                  ))}
-                  <div style={{height:5,borderRadius:3,overflow:"hidden",display:"flex",margin:"10px 0"}}>
-                    {comps.map((c,idx)=><div key={c.id} style={{flex:parseFloat(c.pivot?.value||0)||1,background:compColor(idx),minWidth:2}}/>)}
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:8,borderTop:"1px solid #f1f5f9"}}>
-                    <span style={{fontSize:10.5,color:"#9ca3af",fontWeight:600}}>{comps.length} components</span>
-                    <div style={{fontSize:11,fontWeight:800,color:"#16a34a",background:"#f0fdf4",padding:"3px 10px",borderRadius:99}}>Net ~{fmt(net>0?net:0)}/mo</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {/* ══════════════════════════════════════════════════════
+          TAB 3: MASTER DATA — FULL CRUD
+         ══════════════════════════════════════════════════════ */}
+      {activeTab === "masters" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <MasterListCard
+            title="Earning Components"
+            Icon={FiTrendingUp}
+            color="#10b981"
+            items={components}
+            loading={loadingMasters}
+            type="component"
+            onChanged={fetchMasters}
+            showToast={showToast}
+          />
+          <MasterListCard
+            title="Deduction Components"
+            Icon={FiShield}
+            color="#ef4444"
+            items={deductions}
+            loading={loadingMasters}
+            type="deduction"
+            onChanged={fetchMasters}
+            showToast={showToast}
+          />
         </div>
       )}
-    </div>
-    {(showAddStructure||editStructure) && (
-      <SalaryStructureModal onClose={()=>{setShowAddStructure(false);setEditStructure(null);}} onSave={handleSave} editItem={editStructure}/>
-    )}
-    </>
-  );
-}
 
-// ════════════════════════════════════════════════════════════════════════════
-// ── PAYROLL OVERVIEW CHART
-// ════════════════════════════════════════════════════════════════════════════
-function SalaryBarChart({ data, loading, period, onPeriodChange }) {
-  if (loading) {
-    return (
-      <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:220}}>
-        <Spinner size={18} color={ACCENT}/>
-      </div>
-    );
-  }
-  if (!data || data.length === 0) {
-    return (
-      <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:220,flexDirection:"column",gap:8}}>
-        <div style={{fontSize:28}}>📊</div>
-        <div style={{fontSize:12.5,fontWeight:700,color:"#9ca3af"}}>No payroll data available</div>
-      </div>
-    );
-  }
-  const maxVal = Math.max(...data.map(d => (d.gross || 0)));
-  const safeMax = maxVal || 1;
-  const chartH=130, barW=32, gap=16, padL=62, padB=28;
-  const svgW = Math.max(300, padL + data.length*(barW+gap)+10);
-  const yLabels = [0,0.25,0.5,0.75,1].map(f => Math.round(safeMax*f/1000)*1000);
-  return (
-    <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-        <div>
-          <div style={{fontSize:14,fontWeight:900,color:"#111827"}}>Payroll Overview</div>
-          <div style={{fontSize:11.5,color:"#9ca3af",marginTop:1}}>Monthly salary breakdown</div>
-        </div>
-        <div style={{display:"flex",gap:4,background:"#f9fafb",borderRadius:9,padding:4,border:"1px solid #f1f5f9"}}>
-          {["3M","6M","1Y"].map(p=>(
-            <button key={p} onClick={()=>onPeriodChange(p)}
-              style={{padding:"4px 11px",borderRadius:6,fontSize:11.5,fontWeight:800,border:"none",cursor:"pointer",background:period===p?"linear-gradient(135deg,"+ACCENT+",#ea580c)":"transparent",color:period===p?"#fff":"#9ca3af",transition:"all 0.15s",fontFamily:"Nunito,sans-serif"}}>
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{display:"flex",gap:14,marginBottom:10}}>
-        {[["Gross","#3b82f6"],["Net","#22c55e"],["Deductions","#fca5a5"]].map(([label,color])=>(
-          <div key={label} style={{display:"flex",alignItems:"center",gap:5}}>
-            <div style={{width:9,height:9,borderRadius:3,background:color}}/>
-            <span style={{fontSize:10.5,color:"#6b7280",fontWeight:600}}>{label}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{overflowX:"auto"}}>
-        <svg width={svgW} height={chartH+padB} style={{display:"block"}}>
-          {yLabels.map((val,i)=>{
-            const y = chartH - (val/safeMax)*chartH;
-            return (
-              <g key={i}>
-                <line x1={padL} y1={y} x2={svgW-10} y2={y} stroke="#f1f5f9" strokeWidth={1} strokeDasharray="4 4"/>
-                <text x={padL-6} y={y+4} textAnchor="end" fontSize={9} fill="#9ca3af">{fmtShort(val)}</text>
-              </g>
-            );
-          })}
-          {data.map((d,i)=>{
-            const x     = padL + i*(barW+gap);
-            const gross = d.gross || 0;
-            const net   = d.net   || 0;
-            const ded   = d.deductions || 0;
-            const grossH = (gross/safeMax)*chartH;
-            const netH   = (net/safeMax)*chartH;
-            const dedH   = (ded/safeMax)*chartH;
-            return (
-              <g key={d.month}>
-                <rect x={x} y={chartH-grossH} width={barW} height={grossH} rx={5} fill="#3b82f6" opacity={0.85}/>
-                <rect x={x} y={chartH-netH} width={Math.round(barW*0.45)} height={netH} rx={4} fill="#22c55e" opacity={0.9}/>
-                <rect x={x+Math.round(barW*0.6)} y={chartH-dedH} width={Math.round(barW*0.35)} height={dedH} rx={3} fill="#fca5a5" opacity={0.85}/>
-                <text x={x+barW/2} y={chartH+18} textAnchor="middle" fontSize={9.5} fill="#9ca3af" fontWeight={600}>{MONTH_NAMES[(d.month-1)%12]}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    </div>
-  );
-}
+      {/* ── Modals ─────────────────────────────────────────── */}
+      {viewEmp && (
+        <PayslipModal employee={viewEmp} monthNum={monthNum} year={year} onClose={() => setViewEmp(null)} />
+      )}
 
-// ════════════════════════════════════════════════════════════════════════════
-// ── DEPARTMENT DONUT
-// ════════════════════════════════════════════════════════════════════════════
-function DeptDonut({ deptData, loading }) {
-  if (loading) {
-    return (
-      <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:180}}>
-        <Spinner size={18} color={ACCENT}/>
-      </div>
-    );
-  }
-  if (!deptData || deptData.length === 0) {
-    return (
-      <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:180,flexDirection:"column",gap:8}}>
-        <div style={{fontSize:28}}>🏢</div>
-        <div style={{fontSize:12.5,fontWeight:700,color:"#9ca3af"}}>No department data</div>
-      </div>
-    );
-  }
-  const colors = ["#6366f1","#f97316","#14b8a6","#ec4899","#22c55e","#a855f7","#3b82f6","#eab308"];
-  const total  = deptData.reduce((s,d) => s + (d.amount||0), 0);
-  const entries = deptData.map((d,i) => ({
-    dept:  d.department,
-    val:   d.amount || 0,
-    pct:   d.percentage || ((d.amount/total)*100),
-    color: colors[i % colors.length],
-  }));
-  const cx=55, cy=55, R=44, r=28;
-  let angle = -Math.PI/2;
-  const segments = entries.map(e=>{
-    const start = angle;
-    const sweep = (e.pct/100) * 2 * Math.PI;
-    angle += sweep;
-    const x1=cx+R*Math.cos(start), y1=cy+R*Math.sin(start);
-    const x2=cx+R*Math.cos(start+sweep), y2=cy+R*Math.sin(start+sweep);
-    const ix1=cx+r*Math.cos(start), iy1=cy+r*Math.sin(start);
-    const ix2=cx+r*Math.cos(start+sweep), iy2=cy+r*Math.sin(start+sweep);
-    const large = sweep > Math.PI ? 1 : 0;
-    return { ...e, path:`M${x1},${y1} A${R},${R},0,${large},1,${x2},${y2} L${ix2},${iy2} A${r},${r},0,${large},0,${ix1},${iy1} Z` };
-  });
-  return (
-    <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-      <div style={{fontSize:14,fontWeight:900,color:"#111827",marginBottom:2}}>By Department</div>
-      <div style={{fontSize:11.5,color:"#9ca3af",marginBottom:13}}>Net salary split</div>
-      <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <svg width={110} height={110} style={{flexShrink:0}}>
-          {segments.map((s,i)=><path key={i} d={s.path} fill={s.color}/>)}
-          <text x={cx} y={cy-3} textAnchor="middle" fontSize={9} fill="#9ca3af">Total</text>
-          <text x={cx} y={cy+9} textAnchor="middle" fontSize={10} fontWeight={700} fill="#111827">{fmtShort(total)}</text>
-        </svg>
-        <div style={{flex:1}}>
-          {entries.map(e=>(
-            <div key={e.dept} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <div style={{width:7,height:7,borderRadius:2,background:e.color,flexShrink:0}}/>
-                <span style={{fontSize:10.5,color:"#374151",fontWeight:600}}>{e.dept}</span>
-              </div>
-              <span style={{fontSize:10.5,fontWeight:800,color:"#111827"}}>{Number(e.pct).toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── STAT CARD ─────────────────────────────────────────────────────────────────
-function StatCard({ icon, iconBg, label, value, sub, subColor, trend, loading }) {
-  return (
-    <div style={{background:"#fff",borderRadius:14,padding:"16px 18px",border:"1px solid #f1f5f9",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",flex:1,minWidth:0}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:11}}>
-        <div style={{width:42,height:42,borderRadius:12,background:iconBg,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={icon} stroke="#fff" size={18}/></div>
-        {trend&&<div style={{display:"flex",alignItems:"center",gap:3,fontSize:11,fontWeight:800,color:trend>0?"#16a34a":"#dc2626",background:trend>0?"#f0fdf4":"#fef2f2",padding:"3px 8px",borderRadius:99}}>{trend>0?"↑":"↓"}{Math.abs(trend)}%</div>}
-      </div>
-      <div style={{fontSize:10.5,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>{label}</div>
-      {loading
-        ?<div style={{height:28,width:"60%",background:"linear-gradient(90deg,#f3f4f6,#e5e7eb,#f3f4f6)",backgroundSize:"200% 100%",borderRadius:6,animation:"shimmer 1.2s infinite"}}/>
-        :<div style={{fontSize:22,fontWeight:900,color:"#111827",letterSpacing:"-0.8px",lineHeight:1}}>{value}</div>
-      }
-      {sub&&<div style={{fontSize:11,color:subColor||"#9ca3af",marginTop:5,fontWeight:600}}>{sub}</div>}
-    </div>
-  );
-}
-
-// ── PAYSLIP MODAL ─────────────────────────────────────────────────────────────
-function PayslipModal({ emp, onClose, month }) {
-  const [sending,setSending]=useState(false);const [sent,setSent]=useState(false);
-  const handleSend=async()=>{setSending(true);await new Promise(r=>setTimeout(r,1200));setSending(false);setSent(true);setTimeout(()=>setSent(false),3000);};
-  const gross = emp.gross || 0;
-  const pf    = emp.pf    || 0;
-  const tax   = emp.tax   || 0;
-  const allowances=[{label:"Basic Salary",amount:Math.round(gross*0.5)},{label:"HRA",amount:Math.round(gross*0.2)},{label:"Transport Allowance",amount:Math.round(gross*0.05)},{label:"Medical Allowance",amount:Math.round(gross*0.05)},{label:"Special Allowance",amount:Math.round(gross*0.1)},{label:"Performance Bonus",amount:Math.round(gross*0.1)}];
-  const deductions=[{label:"PF (Employee 12%)",amount:pf},{label:"PF (Employer 12%)",amount:Math.round(pf*0.5)},{label:"Professional Tax",amount:200},{label:"Income Tax (TDS)",amount:tax},{label:"Health Insurance",amount:Math.round(gross*0.01)}];
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(10px)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 48px 120px rgba(0,0,0,0.3)",animation:"modalIn 0.25s ease"}}>
-        <div style={{background:`linear-gradient(135deg,${ACCENT},#ea580c)`,padding:"20px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div><div style={{fontSize:16,fontWeight:900,color:"#fff"}}>Payslip — {month}</div><div style={{fontSize:11.5,color:"rgba(255,255,255,0.7)",marginTop:2}}>Official salary statement</div></div>
-          <button onClick={onClose} style={{width:32,height:32,borderRadius:9,background:"rgba(255,255,255,0.2)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.x} stroke="#fff" size={13}/></button>
-        </div>
-        <div style={{padding:"20px 24px 0"}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:14,padding:"13px 15px",background:"#f8fafc",borderRadius:11,border:"1px solid #f1f5f9"}}>
-            <div><div style={{fontSize:13.5,fontWeight:900,color:"#111827"}}>Organization</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>HR Management System</div></div>
-            <div style={{textAlign:"right"}}><div style={{fontSize:11.5,fontWeight:800,color:ACCENT}}>Payslip #{emp.id}</div><div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{month} · {emp.bank||"—"}</div></div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,padding:"11px 14px",background:"#fff7ed",borderRadius:11,border:"1px solid #fed7aa"}}>
-            <Avatar name={emp.name||"?"} size={42}/>
-            <div><div style={{fontSize:13.5,fontWeight:800,color:"#111827"}}>{emp.name}</div><div style={{fontSize:11,color:"#9ca3af"}}>{emp.id} · {emp.role} · {emp.dept}</div><div style={{fontSize:11,color:"#9ca3af"}}>Joining: {emp.joining||"—"} · Days: {emp.paid_days||0}/{emp.work_days||0}</div></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:2,background:"#22c55e"}}/> Earnings</div>
-              {allowances.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:11.5,color:"#6b7280"}}>{a.label}</span><span style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>{fmt(a.amount)}</span></div>)}
-              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#16a34a",fontSize:13}}><span>Gross</span><span>{fmt(gross)}</span></div>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:2,background:"#ef4444"}}/> Deductions</div>
-              {deductions.map((d,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9fafb"}}><span style={{fontSize:11.5,color:"#6b7280"}}>{d.label}</span><span style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>{fmt(d.amount)}</span></div>)}
-              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 0",fontWeight:900,color:"#dc2626",fontSize:13}}><span>Total</span><span>{fmt(emp.deduction||0)}</span></div>
-            </div>
-          </div>
-          <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-            <div><div style={{fontSize:10.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>Net Take Home</div><div style={{fontSize:28,fontWeight:900,color:"#fff",letterSpacing:"-1.5px"}}>{fmt(emp.net||0)}</div></div>
-            <div style={{width:54,height:54,borderRadius:"50%",background:`${ACCENT}25`,border:`2px solid ${ACCENT}50`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.wallet} stroke={ACCENT} size={22}/></div>
-          </div>
-          <div style={{display:"flex",gap:10,marginBottom:20}}>
-            <button style={{flex:1,padding:"10px 0",background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,fontSize:12.5,fontWeight:700,color:"#374151",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"Nunito,sans-serif"}}><Ic d={ICONS.download} stroke="#374151" size={13}/> Download PDF</button>
-            <button onClick={handleSend} disabled={sending||sent} style={{flex:1,padding:"10px 0",background:sent?"#16a34a":`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:12.5,fontWeight:800,color:"#fff",cursor:sending||sent?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"Nunito,sans-serif"}}>
-              {sending?<><Spinner size={12}/>&nbsp;Sending…</>:sent?<><Ic d={ICONS.check} stroke="#fff" size={12} sw={2.5}/>Sent!</>:<><Ic d={ICONS.send} stroke="#fff" size={12}/>Email Payslip</>}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditSalaryModal({ emp, onClose, onSave }) {
-  const [form,setForm]=useState({gross:emp.gross||0,deduction:emp.deduction||0,status:emp.status||"Pending",salaryGrade:emp.salaryGrade||"Basic"});
-  const [saving,setSaving]=useState(false);
-  const net=form.gross-form.deduction;
-  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
-  const handleSave=async()=>{setSaving(true);await new Promise(r=>setTimeout(r,800));onSave({...emp,...form,net});setSaving(false);onClose();};
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(10px)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:440,boxShadow:"0 32px 80px rgba(0,0,0,0.28)",animation:"modalIn 0.22s ease",overflow:"hidden"}}>
-        <div style={{background:`linear-gradient(135deg,${ACCENT},#ea580c)`,padding:"17px 22px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div><div style={{fontSize:14.5,fontWeight:900,color:"#fff"}}>Edit Salary — {emp.name}</div><div style={{fontSize:11.5,color:"rgba(255,255,255,0.7)",marginTop:1}}>{emp.id} · {emp.role}</div></div>
-          <button onClick={onClose} style={{width:30,height:30,borderRadius:9,background:"rgba(255,255,255,0.2)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ic d={ICONS.x} stroke="#fff" size={13}/></button>
-        </div>
-        <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:14}}>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:8}}>Salary Grade</label>
-            <div style={{display:"flex",gap:8}}>{["Basic","Medium","High"].map(g=>{const cfg=GRADE_CFG[g];return<button key={g} onClick={()=>set("salaryGrade",g)} style={{flex:1,padding:"9px 0",borderRadius:9,border:`2px solid ${form.salaryGrade===g?cfg.color:cfg.border}`,background:form.salaryGrade===g?cfg.bg:"#fff",fontSize:12.5,fontWeight:800,color:form.salaryGrade===g?cfg.color:"#9ca3af",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>{cfg.label}</button>;})}</div>
-          </div>
-          {[["Gross Salary","gross"],["Total Deduction","deduction"]].map(([label,key])=>(
-            <div key={key}>
-              <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:6}}>{label}</label>
-              <div style={{position:"relative"}}><span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:12.5,color:"#9ca3af"}}>₹</span>
-              <input type="number" value={form[key]} onChange={e=>set(key,Number(e.target.value))} style={{width:"100%",padding:"10px 12px 10px 28px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:13.5,fontWeight:700,color:"#111827",outline:"none",boxSizing:"border-box",fontFamily:"Nunito,sans-serif"}} onFocus={e=>e.target.style.borderColor=ACCENT} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/></div>
-            </div>
-          ))}
-          <div style={{padding:"11px 15px",background:net>0?"#f0fdf4":"#fef2f2",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",border:`1.5px solid ${net>0?"#bbf7d0":"#fecaca"}`}}>
-            <span style={{fontSize:12.5,fontWeight:700,color:net>0?"#16a34a":"#dc2626"}}>Net Pay Preview</span>
-            <span style={{fontSize:18,fontWeight:900,color:net>0?"#16a34a":"#dc2626"}}>{fmt(net)}</span>
-          </div>
-          <div>
-            <label style={{fontSize:11.5,fontWeight:700,color:"#374151",display:"block",marginBottom:7}}>Payment Status</label>
-            <div style={{display:"flex",gap:8}}>{["Paid","Pending","Unpaid"].map(s=>(
-              <button key={s} onClick={()=>set("status",s)} style={{flex:1,padding:"9px 0",borderRadius:9,border:`2px solid ${form.status===s?STATUS_CFG[s].border:"#e5e7eb"}`,background:form.status===s?STATUS_CFG[s].bg:"#fff",fontSize:12.5,fontWeight:800,color:form.status===s?STATUS_CFG[s].color:"#9ca3af",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>{s}</button>
-            ))}</div>
-          </div>
-        </div>
-        <div style={{padding:"0 22px 20px",display:"flex",gap:10}}>
-          <button onClick={onClose} style={{flex:1,padding:"11px 0",background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{flex:2,padding:"11px 0",background:saving?"#d1d5db":`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"Nunito,sans-serif"}}>
-            {saving?<><Spinner size={13}/>&nbsp;Saving…</>:<><Ic d={ICONS.check} stroke="#fff" size={13} sw={2.5}/>Save Changes</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ConfirmModal({ emp, onClose, onConfirm }) {
-  const [loading,setLoading]=useState(false);
-  const handle=async()=>{setLoading(true);await new Promise(r=>setTimeout(r,700));onConfirm();};
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(10px)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:360,padding:24,boxShadow:"0 32px 80px rgba(0,0,0,0.28)",animation:"modalIn 0.22s ease",textAlign:"center"}}>
-        <div style={{width:56,height:56,borderRadius:"50%",background:"#fef2f2",border:"2px solid #fecaca",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 13px"}}><Ic d={ICONS.trash} stroke="#dc2626" size={22}/></div>
-        <div style={{fontSize:15,fontWeight:900,color:"#111827",marginBottom:7}}>Delete Record?</div>
-        <div style={{fontSize:12.5,color:"#6b7280",marginBottom:20,lineHeight:1.7}}>Remove salary record for <strong>{emp.name}</strong>?</div>
-        <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{flex:1,padding:"10px 0",background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer",fontFamily:"Nunito,sans-serif"}}>Cancel</button>
-          <button onClick={handle} disabled={loading} style={{flex:1,padding:"10px 0",background:loading?"#d1d5db":"#dc2626",border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"Nunito,sans-serif"}}>
-            {loading?<><Spinner size={13}/>&nbsp;Deleting…</>:"Yes, Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// ── MAIN PAGE
-// ════════════════════════════════════════════════════════════════════════════
-export default function EmployeeSalaryPage() {
-  const [activeTab,        setActiveTab]        = useState("salary");
-  const [employees,        setEmployees]        = useState([]);
-  const [loadingEmps,      setLoadingEmps]      = useState(true);
-  const [errorEmps,        setErrorEmps]        = useState(null);
-  const [search,           setSearch]           = useState("");
-  const [dept,             setDept]             = useState("All");
-  const [status,           setStatus]           = useState("All");
-  const [sortBy,           setSortBy]           = useState("name");
-  const [sortDir,          setSortDir]          = useState("asc");
-  const [rowsPerPage,      setRowsPerPage]      = useState(10);
-  const [page,             setPage]             = useState(1);
-  const [selectedIds,      setSelectedIds]      = useState(new Set());
-  const [viewEmp,          setViewEmp]          = useState(null);
-  const [editEmp,          setEditEmp]          = useState(null);
-  const [deleteEmp,        setDeleteEmp]        = useState(null);
-  const [period,           setPeriod]           = useState("6M");
-  const [month,            setMonth]            = useState("May 2026");
-  const [showAddStructure, setShowAddStructure] = useState(false);
-  const [editStructure,    setEditStructure]    = useState(null);
-
-  const [dashStats,        setDashStats]        = useState(null);
-  const [monthlyBreakdown, setMonthlyBreakdown] = useState([]);
-  const [deptBreakdown,    setDeptBreakdown]    = useState([]);
-  const [loadingStats,     setLoadingStats]     = useState(true);
-
-  // ── Fetch employees ────────────────────────────────────────────────────────
-  useEffect(() => {
-    setLoadingEmps(true);
-    setErrorEmps(null);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/employees`, {
-      headers: getHeaders(),
-    })
-      .then(r => r.json())
-      .then(res => {
-        const list = res.data ?? res.employees ?? (Array.isArray(res) ? res : []);
-       const normalized = list.map(e => ({
-  id:          String(e.employee_id ?? e.id ?? ""),
-  name:        String(e.firstname && e.lastname ? `${e.firstname} ${e.lastname}` : (e.username ?? e.name ?? "")),
-  role:        String(e.designation?.name ?? e.position ?? e.role ?? ""),
-  dept:        String(e.department?.name ?? e.dept ?? ""),
-  gross:       parseFloat(e.salary_structure?.monthly_ctc ?? e.gross_salary ?? e.gross ?? 0),
-  deduction:   parseFloat(e.total_deduction ?? e.deduction ?? 0),
-  net:         parseFloat(e.net_salary ?? e.net ?? 0),
-  tax:         parseFloat(e.tax ?? 0),
-  pf:          parseFloat(e.pf ?? 0),
-  paid_days:   Number(e.paid_days ?? e.working_days ?? 22),
-  work_days:   Number(e.work_days ?? e.total_days ?? 22),
-  status:      String(e.payment_status ?? e.status ?? "Pending"),
-  joining:     String(e.joining_date ?? e.joining ?? ""),
-  bank:        String(e.bank_account ?? e.bank ?? ""),
-  salaryGrade: String(e.salary_structure?.grade ?? e.salary_grade ?? e.salaryGrade ?? "Basic"),
-}));
-        setEmployees(normalized);
-      })
-      .catch(() => setErrorEmps("Failed to load employees."))
-      .finally(() => setLoadingEmps(false));
-  }, []);
-
-  // ── Fetch dashboard stats ──────────────────────────────────────────────────
-  useEffect(() => {
-    const year = month.split(" ")[1] || new Date().getFullYear();
-    setLoadingStats(true);
-    api.getDashboardStats(year)
-      .then(res => {
-        if (res.success) {
-          setDashStats(res.totals);
-          setMonthlyBreakdown(Array.isArray(res.monthly_breakdown) ? res.monthly_breakdown : []);
-          setDeptBreakdown(Array.isArray(res.department_breakdown) ? res.department_breakdown : []);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingStats(false));
-  }, [month]);
-
-  const filteredMonthly = (() => {
-    if (!monthlyBreakdown.length) return [];
-    const sorted = [...monthlyBreakdown].sort((a,b) => a.month - b.month);
-    if (period === "3M") return sorted.slice(-3);
-    if (period === "6M") return sorted.slice(-6);
-    return sorted;
-  })();
-
-  const totalGross     = dashStats ? dashStats.gross          : employees.reduce((s,e)=>s+(e.gross||0),0);
-  const totalNet       = dashStats ? dashStats.net            : employees.reduce((s,e)=>s+(e.net||0),0);
-  const totalDeduction = dashStats ? dashStats.deductions     : employees.reduce((s,e)=>s+(e.deduction||0),0);
-  const paidCount      = dashStats ? dashStats.paid           : employees.filter(e=>e.status==="Paid").length;
-  const pendingCount   = dashStats ? dashStats.pending        : employees.filter(e=>e.status==="Pending").length;
-  const unpaidCount    = dashStats ? dashStats.unpaid         : employees.filter(e=>e.status==="Unpaid").length;
-  const totalEmployees = dashStats ? dashStats.employee_count : employees.length;
-
-  const filtered = employees.filter(e => {
-    const q = search.toLowerCase();
-    const nameMatch   = (e.name  || "").toLowerCase().includes(q);
-    const idMatch     = (e.id    || "").toLowerCase().includes(q);
-    const roleMatch   = (e.role  || "").toLowerCase().includes(q);
-    const deptMatch   = dept   === "All" || e.dept   === dept;
-    const statusMatch = status === "All" || e.status === status;
-    return (nameMatch || idMatch || roleMatch) && deptMatch && statusMatch;
-  }).sort((a,b) => {
-    let va = a[sortBy] ?? "", vb = b[sortBy] ?? "";
-    if (typeof va === "string") { va = va.toLowerCase(); vb = (vb||"").toLowerCase(); }
-    return sortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
-  const paginated  = filtered.slice((page-1)*rowsPerPage, page*rowsPerPage);
-
-  const toggleSort = (col) => { if(sortBy===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortBy(col); setSortDir("asc"); } };
-  const toggleRow  = (id)  => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleAll  = ()    => { if(selectedIds.size===paginated.length) setSelectedIds(new Set()); else setSelectedIds(new Set(paginated.map(e=>e.id))); };
-  const handleSaveEdit = (updated) => setEmployees(prev => prev.map(e => e.id===updated.id ? updated : e));
-  const handleDelete   = () => { setEmployees(prev => prev.filter(e => e.id!==deleteEmp.id)); setDeleteEmp(null); };
-
-  const SortIcon = ({col}) => (
-    <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={sortBy===col?ACCENT:"#d1d5db"} strokeWidth={2.5} strokeLinecap="round">
-      <path d={sortBy===col&&sortDir==="asc"?"M8 15l4 4 4-4M12 19V5":sortBy===col&&sortDir==="desc"?"M8 9l4-4 4 4M12 5v14":"M8 9l4-4 4 4M8 15l4 4 4-4"}/>
-    </svg>
-  );
-
-  const TABS = [
-    {key:"salary",     label:"Employee Salary",   icon:ICONS.users},
-    {key:"structures", label:"Salary Structures", icon:ICONS.layers},
-    {key:"settings",   label:"Payroll Settings",  icon:ICONS.settings},
-  ];
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:18,fontFamily:"'Nunito','DM Sans',system-ui,sans-serif"}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
-        @keyframes spin    {from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-        @keyframes modalIn {from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes shimmer {0%{background-position:200% 0}100%{background-position:-200% 0}}
-        .sal-row:hover{background:#fafafa !important;}
-        .sal-row:hover .row-actions{opacity:1 !important;}
-        .row-actions{opacity:0;transition:opacity 0.15s;}
-        .icon-btn:hover{transform:scale(1.12);}
-        .icon-btn{transition:transform 0.12s;}
-        .ss-card:hover{box-shadow:0 10px 32px rgba(0,0,0,0.12) !important;transform:translateY(-3px) !important;}
-        .ss-card{transition:all 0.22s !important;}
-        * {font-family:'Nunito',sans-serif;}
-      `}</style>
-
-      {/* PAGE HEADER */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div>
-          <div style={{fontSize:22,fontWeight:900,color:"#111827",letterSpacing:"-0.7px"}}>Employee Salary</div>
-          <div style={{fontSize:12.5,color:"#9ca3af",marginTop:2,fontWeight:600}}>Manage payroll, structures & compliance — {month}</div>
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <button style={{display:"flex",alignItems:"center",gap:7,padding:"9px 16px",background:"#fff",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer"}}>
-            <Ic d={ICONS.download} stroke="#374151" size={14}/> Export
-          </button>
-          {activeTab==="salary"&&(
-            <button style={{display:"flex",alignItems:"center",gap:7,padding:"9px 18px",background:`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:`0 4px 16px ${ACCENT}55`}}>
-              <Ic d={ICONS.plus} stroke="#fff" size={14}/> Add Employee
-            </button>
-          )}
-          {activeTab==="structures"&&(
-            <button onClick={()=>{setEditStructure(null);setShowAddStructure(true);}}
-              style={{display:"flex",alignItems:"center",gap:7,padding:"9px 18px",background:`linear-gradient(135deg,${ACCENT},#ea580c)`,border:"none",borderRadius:10,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:`0 4px 16px ${ACCENT}55`}}>
-              <Ic d={ICONS.plus} stroke="#fff" size={14}/> Add Structure
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* TAB BAR */}
-      <div style={{display:"flex",gap:0,background:"#fff",borderRadius:13,border:"1px solid #f1f5f9",padding:5,width:"fit-content",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
-        {TABS.map(t=>(
-          <button key={t.key} onClick={()=>setActiveTab(t.key)}
-            style={{display:"flex",alignItems:"center",gap:7,padding:"9px 20px",borderRadius:10,border:"none",cursor:"pointer",fontSize:12.5,fontWeight:activeTab===t.key?900:600,background:activeTab===t.key?`linear-gradient(135deg,${ACCENT},#ea580c)`:"transparent",color:activeTab===t.key?"#fff":"#6b7280",transition:"all 0.2s"}}>
-            <Ic d={t.icon} stroke={activeTab===t.key?"#fff":"#9ca3af"} size={13}/>{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── EMPLOYEE SALARY TAB ── */}
-      {activeTab==="salary"&&(<>
-
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-          <StatCard icon={ICONS.wallet}   iconBg="linear-gradient(135deg,#1e293b,#374151)" label="Total Gross Payroll" value={fmtShort(totalGross)}     sub={`${totalEmployees} employee${totalEmployees!==1?"s":""}`} trend={7}  loading={loadingStats}/>
-          <StatCard icon={ICONS.trending} iconBg="linear-gradient(135deg,#16a34a,#15803d)" label="Net Payroll"         value={fmtShort(totalNet)}       sub="After all deductions"  subColor="#16a34a" trend={5}  loading={loadingStats}/>
-          <StatCard icon={ICONS.fileText} iconBg="linear-gradient(135deg,#dc2626,#b91c1c)" label="Total Deductions"    value={fmtShort(totalDeduction)} sub="Tax + PF + Insurance"  trend={-2} loading={loadingStats}/>
-          <StatCard icon={ICONS.users}    iconBg="linear-gradient(135deg,#6366f1,#4f46e5)" label="Payment Status"      value={`${paidCount} Paid`}      sub={`${pendingCount} Pending · ${unpaidCount} Unpaid`} subColor="#d97706" loading={loadingStats}/>
-        </div>
-
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {[
-            {label:"All Employees",count:employees.length,color:"#6366f1",bg:"#eef2ff",filter:"All"},
-            {label:"Paid",         count:paidCount,       color:"#16a34a",bg:"#f0fdf4",filter:"Paid"},
-            {label:"Pending",      count:pendingCount,    color:"#d97706",bg:"#fffbeb",filter:"Pending"},
-            {label:"Unpaid",       count:unpaidCount,     color:"#dc2626",bg:"#fef2f2",filter:"Unpaid"},
-          ].map(({label,count,color,bg,filter:f})=>(
-            <div key={label} onClick={()=>{setStatus(f);setPage(1);}}
-              style={{display:"flex",alignItems:"center",gap:7,padding:"8px 16px",background:status===f?bg:bg+"88",borderRadius:99,cursor:"pointer",border:`1.5px solid ${status===f?color+"55":"transparent"}`,transition:"all 0.15s"}}>
-              <div style={{width:7,height:7,borderRadius:"50%",background:color}}/>
-              <span style={{fontSize:12,fontWeight:800,color}}>{count} {label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:12}}>
-          <SalaryBarChart data={filteredMonthly} loading={loadingStats} period={period} onPeriodChange={setPeriod}/>
-          <DeptDonut deptData={deptBreakdown} loading={loadingStats}/>
-        </div>
-
-        {/* TABLE */}
-        <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-          <div style={{padding:"13px 20px",borderBottom:"1px solid #f3f4f6",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-            <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <Ic d={ICONS.users} stroke={ACCENT} size={16}/>
-              <span style={{fontSize:14,fontWeight:900,color:"#111827"}}>Salary List</span>
-              <span style={{background:"#fff7ed",color:ACCENT,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:800,border:`1px solid ${ACCENT}33`}}>{filtered.length} records</span>
-              {selectedIds.size>0&&<span style={{background:"#eef2ff",color:"#6366f1",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:800}}>{selectedIds.size} selected</span>}
-            </div>
-            <div style={{display:"flex",gap:7,alignItems:"center"}}>
-              <select value={month} onChange={e=>setMonth(e.target.value)} style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:"#374151",cursor:"pointer",outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:600}}>
-                {["January 2026","February 2026","March 2026","April 2026","May 2026","June 2026"].map(m=><option key={m}>{m}</option>)}
-              </select>
-              <select value={dept} onChange={e=>{setDept(e.target.value);setPage(1);}} style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:"#374151",cursor:"pointer",outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:600}}>
-                {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
-              </select>
-              <select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}} style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:"#374151",cursor:"pointer",outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:600}}>
-                {["All","Paid","Pending","Unpaid"].map(s=><option key={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{padding:"9px 20px",borderBottom:"1px solid #f3f4f6",background:"#fafafa",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:11.5,color:"#6b7280",fontWeight:600}}>Rows per page</span>
-              <select value={rowsPerPage} onChange={e=>{setRowsPerPage(Number(e.target.value));setPage(1);}} style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,padding:"4px 8px",fontSize:11.5,color:"#374151",cursor:"pointer",outline:"none",fontFamily:"Nunito,sans-serif",fontWeight:700}}>
-                {[5,10,20,50].map(n=><option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:7,background:"#fff",border:"1px solid #e5e7eb",borderRadius:9,padding:"5px 11px"}}>
-              <Ic d={ICONS.search} stroke="#9ca3af" size={13}/>
-              <input value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}} placeholder="Search name, ID, role…" style={{border:"none",background:"transparent",fontSize:12.5,color:"#374151",outline:"none",width:200,fontFamily:"Nunito,sans-serif"}}/>
-              {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex"}}><Ic d={ICONS.x} stroke="#9ca3af" size={11}/></button>}
-            </div>
-          </div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead>
-                <tr style={{background:"#fafafa"}}>
-                  <th style={{width:38,padding:"11px 16px",textAlign:"center"}}><input type="checkbox" checked={selectedIds.size===paginated.length&&paginated.length>0} onChange={toggleAll} style={{width:13,height:13,cursor:"pointer",accentColor:ACCENT}}/></th>
-                  {[{label:"Emp ID",col:"id"},{label:"Employee",col:"name"},{label:"Department",col:"dept"},{label:"Grade",col:"salaryGrade"},{label:"Paid Days",col:"paid_days"},{label:"Gross",col:"gross"},{label:"Deduction",col:"deduction"},{label:"Net Pay",col:"net"},{label:"Status",col:"status"},{label:"",col:null}].map(({label,col},i)=>(
-                    <th key={i} onClick={()=>col&&toggleSort(col)} style={{padding:"11px 12px 11px 0",textAlign:"left",fontSize:10.5,fontWeight:800,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.6px",whiteSpace:"nowrap",cursor:col?"pointer":"default",userSelect:"none"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:4}}>{label}{col&&<SortIcon col={col}/>}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loadingEmps ? (
-                  <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10}}><Spinner size={18} color={ACCENT}/><span style={{fontWeight:700}}>Loading employees…</span></div>
-                  </td></tr>
-                ) : errorEmps ? (
-                  <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#dc2626",fontSize:13}}>
-                    <div style={{fontSize:32,marginBottom:10}}>⚠️</div><div style={{fontWeight:700}}>{errorEmps}</div>
-                  </td></tr>
-                ) : paginated.length===0 ? (
-                  <tr><td colSpan={10} style={{padding:"60px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>
-                    <div style={{fontSize:32,marginBottom:10}}>🔍</div><div style={{fontWeight:700}}>No salary records found</div>
-                  </td></tr>
-                ) : paginated.map(emp => {
-                  const isChecked = selectedIds.has(emp.id);
-                  return (
-                    <tr key={emp.id} className="sal-row" style={{borderTop:"1px solid #f3f4f6",background:isChecked?`${ACCENT}06`:"#fff",transition:"background 0.12s"}}>
-                      <td style={{padding:"12px 16px",textAlign:"center"}}><input type="checkbox" checked={isChecked} onChange={()=>toggleRow(emp.id)} style={{width:13,height:13,cursor:"pointer",accentColor:ACCENT}}/></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><span style={{fontSize:11.5,fontWeight:800,color:"#9ca3af"}}>{emp.id}</span></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={emp.name||"?"} size={32}/><div><div style={{fontSize:12.5,fontWeight:800,color:"#111827",whiteSpace:"nowrap"}}>{emp.name}</div><div style={{fontSize:10.5,color:"#9ca3af",marginTop:1,fontWeight:600}}>{emp.role}</div></div></div></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><DeptBadge dept={emp.dept}/></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><GradeBadge grade={emp.salaryGrade||"Basic"}/></td>
-                      <td style={{padding:"12px 12px 12px 0"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <div style={{width:34,height:5,borderRadius:3,background:"#f1f5f9",overflow:"hidden"}}><div style={{width:`${emp.work_days>0?(emp.paid_days/emp.work_days)*100:0}%`,height:"100%",background:emp.paid_days===emp.work_days?"#22c55e":"#f59e0b",borderRadius:3}}/></div>
-                          <span style={{fontSize:11.5,fontWeight:700,color:"#374151"}}>{emp.paid_days}/{emp.work_days}</span>
-                        </div>
-                      </td>
-                      <td style={{padding:"12px 12px 12px 0"}}><span style={{fontSize:12.5,fontWeight:800,color:"#111827"}}>{fmt(emp.gross)}</span></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><span style={{fontSize:12,fontWeight:700,color:"#dc2626"}}>−{fmt(emp.deduction)}</span></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><span style={{fontSize:12.5,fontWeight:900,color:"#16a34a"}}>{fmt(emp.net)}</span></td>
-                      <td style={{padding:"12px 12px 12px 0"}}><StatusBadge status={emp.status}/></td>
-                      <td style={{padding:"12px 20px 12px 0"}}>
-                        <div className="row-actions" style={{display:"flex",gap:5}}>
-                          <button className="icon-btn" onClick={()=>setViewEmp(emp)} title="View Payslip" style={{width:28,height:28,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Ic d={ICONS.fileText} stroke={ACCENT} size={12}/></button>
-                          <button className="icon-btn" onClick={()=>setEditEmp(emp)} title="Edit" style={{width:28,height:28,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Ic d={ICONS.edit} stroke="#0369a1" size={12}/></button>
-                          <button className="icon-btn" onClick={()=>setDeleteEmp(emp)} title="Delete" style={{width:28,height:28,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Ic d={ICONS.trash} stroke="#dc2626" size={12}/></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{padding:"11px 20px",borderTop:"1px solid #f3f4f6",background:"#fafafa",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:11.5,color:"#6b7280",fontWeight:600}}>
-              Showing <strong style={{color:"#111827"}}>{filtered.length===0?0:Math.min((page-1)*rowsPerPage+1,filtered.length)}</strong>–<strong style={{color:"#111827"}}>{Math.min(page*rowsPerPage,filtered.length)}</strong> of <strong style={{color:"#111827"}}>{filtered.length}</strong>
-              {(search||dept!=="All"||status!=="All")?` (filtered from ${employees.length})`:""}</span>
-            <div style={{display:"flex",gap:3}}>
-              <button onClick={()=>setPage(1)} disabled={page===1} style={{width:28,height:28,background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,cursor:page===1?"not-allowed":"pointer",opacity:page===1?0.4:1,fontSize:11,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>«</button>
-              <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1} style={{width:28,height:28,background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",cursor:page===1?"not-allowed":"pointer",opacity:page===1?0.4:1}}><Ic d={ICONS.chevLeft} size={12} stroke="#6b7280"/></button>
-              {Array.from({length:totalPages},(_,i)=>i+1).slice(Math.max(0,page-3),page+2).map(n=>(
-                <button key={n} onClick={()=>setPage(n)} style={{width:28,height:28,borderRadius:7,border:`1.5px solid ${n===page?ACCENT:"#e5e7eb"}`,background:n===page?"linear-gradient(135deg,"+ACCENT+",#ea580c)":"#fff",fontSize:12,fontWeight:n===page?900:600,color:n===page?"#fff":"#6b7280",cursor:"pointer"}}>{n}</button>
-              ))}
-              <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages} style={{width:28,height:28,background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",cursor:page===totalPages?"not-allowed":"pointer",opacity:page===totalPages?0.4:1}}><Ic d={ICONS.chevRight} size={12} stroke="#6b7280"/></button>
-              <button onClick={()=>setPage(totalPages)} disabled={page===totalPages} style={{width:28,height:28,background:"#fff",border:"1px solid #e5e7eb",borderRadius:7,cursor:page===totalPages?"not-allowed":"pointer",opacity:page===totalPages?0.4:1,fontSize:11,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>»</button>
-            </div>
-          </div>
-        </div>
-      </>)}
-
-      {activeTab==="structures" && (
-        <SalaryStructuresSection
-          showAddStructure={showAddStructure}
-          setShowAddStructure={setShowAddStructure}
-          editStructure={editStructure}
-          setEditStructure={setEditStructure}
+      {editEmp && (
+        <EditSalaryModal
+          employee={editEmp}
+          structures={structures}
+          onClose={() => setEditEmp(null)}
+          onSaved={() => {
+            fetchEmployees();
+            showToast("Assigned", "Salary structure assigned successfully", false);
+          }}
         />
       )}
 
-      {activeTab==="settings" && <PayrollSettingsPanel/>}
+      {showStructureForm && (
+        <StructureFormModal
+          editItem={editStructure}
+          components={components}
+          deductions={deductions}
+          onClose={() => { setShowStructureForm(false); setEditStructure(null); }}
+          onSaved={() => {
+            fetchStructures();
+            showToast(editStructure ? "Updated" : "Created", "Salary structure saved successfully", false);
+          }}
+        />
+      )}
 
-      {viewEmp   && <PayslipModal emp={viewEmp} month={month} onClose={()=>setViewEmp(null)}/>}
-      {editEmp   && <EditSalaryModal emp={editEmp} onClose={()=>setEditEmp(null)} onSave={handleSaveEdit}/>}
-      {deleteEmp && <ConfirmModal emp={deleteEmp} onClose={()=>setDeleteEmp(null)} onConfirm={handleDelete}/>}
+      {structureToDelete && (
+        <ConfirmModal
+          title="Delete Salary Structure?"
+          message={`"${structureToDelete.name}" will be permanently deleted. Employees currently assigned to this structure will lose their salary setup.`}
+          confirmLabel="Delete Structure"
+          loading={deletingStruct}
+          onConfirm={confirmDeleteStructure}
+          onClose={() => !deletingStruct && setStructureToDelete(null)}
+        />
+      )}
+
+      <Toast
+        isOpen={toast.open}
+        title={toast.title}
+        message={toast.message}
+        isError={toast.isError}
+        onClose={() => setToast(t => ({ ...t, open: false }))}
+      />
     </div>
   );
 }

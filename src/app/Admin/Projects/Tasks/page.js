@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search,
+import { Plus, RefreshCw, Star, Calendar, ChevronDown, ChevronUp, CheckSquare, Square, X, Search,
   Loader2, CircleCheck, CircleAlert, AlertTriangle, TriangleAlert, Building2, Hash, FileText,
   Users, UserRoundCog, Crown, Tag as TagIcon, RotateCw, UserPlus, MapPin, BadgeCheck, CreditCard,
   Trash2, PencilLine, ScanEye, Ellipsis, FolderUp, ArrowRight, CheckCheck, CalendarDays,
@@ -2096,31 +2095,22 @@ function AddProjectModal({ onClose, onSuccess }) {
   );
 }
 
-// ── ADD TASK MODAL ───────────────────────────────────────────────────
+// ── ADD TASK MODAL (MULTI) ───────────────────────────────────────────
 function AddTaskModal({ onClose, onSuccess }) {
-  const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [tasks, setTasks] = useState([
+    { title: "", dueDate: "", startDate: "", priority: "", description: "", assignees: [] }
+  ]);
   const [projectId, setProjectId] = useState("");
-  const [assignees, setAssignees] = useState([]);
-  const [priority, setPriority] = useState("");
-  const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState("");
   const [projects, setProjects] = useState([]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
   const [employees, setEmployees] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [apiErrors, setApiErrors] = useState({});
   const [inlineError, setInlineError] = useState(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [projectSuccessMsg, setProjectSuccessMsg] = useState(null);
-
-  const isFormValid =
-    title.trim() !== "" &&
-    projectId !== "" &&
-    dueDate !== "" &&
-    priority !== "" &&
-    assignees.length > 0;
+  const [expandedIndex, setExpandedIndex] = useState(0); // which task is expanded
 
   useEffect(() => { fetchProjects(); }, []);
 
@@ -2139,13 +2129,41 @@ function AddTaskModal({ onClose, onSuccess }) {
         const res = await fetch(`${BASE}/api/admin/employees`, { headers: authHeaders() });
         const data = await res.json();
         const d = data.data || data;
-        setEmployees(d.map(emp => ({
+        setEmployees((Array.isArray(d) ? d : []).map(emp => ({
           id: emp.id,
           name: emp.firstname ? `${emp.firstname} ${emp.lastname || ""}`.trim() : (emp.name || emp.username || emp.email),
         })));
       } catch (e) { console.error(e); } finally { setLoadingEmployees(false); }
     })();
   }, []);
+
+  const updateTask = (idx, key, value) => {
+    setTasks(prev => prev.map((t, i) => i === idx ? { ...t, [key]: value } : t));
+  };
+
+  const addTaskRow = () => {
+    setTasks(prev => [
+      ...prev,
+      { title: "", dueDate: "", startDate: "", priority: "", description: "", assignees: [] }
+    ]);
+    setExpandedIndex(tasks.length);
+  };
+
+  const removeTaskRow = (idx) => {
+    if (tasks.length === 1) return; // keep at least one
+    setTasks(prev => prev.filter((_, i) => i !== idx));
+    if (expandedIndex >= idx && expandedIndex > 0) setExpandedIndex(expandedIndex - 1);
+  };
+
+  const duplicateTaskRow = (idx) => {
+    const original = tasks[idx];
+    setTasks(prev => [
+      ...prev.slice(0, idx + 1),
+      { ...original, title: original.title + " (copy)" },
+      ...prev.slice(idx + 1)
+    ]);
+    setExpandedIndex(idx + 1);
+  };
 
   const handleProjectAdded = () => {
     fetchProjects();
@@ -2156,25 +2174,55 @@ function AddTaskModal({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setApiErrors({}); setInlineError(null);
-    if (!title.trim()) { setInlineError("Title is required."); return; }
-    if (!projectId)    { setInlineError("Please select a project."); return; }
-    if (!dueDate)      { setInlineError("Due date is required."); return; }
-    if (!priority)     { setInlineError("Priority is required."); return; }
-    if (!assignees.length) { setInlineError("Please select at least one assignee."); return; }
+
+    if (!projectId) { setInlineError("Please select a project."); return; }
+
+    // Validate all rows
+    for (let i = 0; i < tasks.length; i++) {
+      const t = tasks[i];
+      if (!t.title.trim()) { setInlineError(`Task #${i + 1}: Title is required.`); setExpandedIndex(i); return; }
+      if (!t.dueDate)      { setInlineError(`Task #${i + 1}: Due date is required.`); setExpandedIndex(i); return; }
+      if (!t.priority)     { setInlineError(`Task #${i + 1}: Priority is required.`); setExpandedIndex(i); return; }
+      if (!t.assignees.length) { setInlineError(`Task #${i + 1}: Select at least one assignee.`); setExpandedIndex(i); return; }
+    }
+
     setSubmitting(true);
     try {
-      const res = await fetch(`${BASE}/api/admin/tasks`, {
+      const payload = {
+        project_id: parseInt(projectId),
+        tasks: tasks.map(t => ({
+          title:       t.title.trim(),
+          description: t.description.trim() || null,
+          start_date:  t.startDate || null,
+          due_date:    t.dueDate,
+          priority:    t.priority.toLowerCase(),
+          assignees:   t.assignees.map(Number),
+        })),
+      };
+
+      // Use bulk endpoint if multiple, else single
+      const endpoint = tasks.length > 1 ? "/api/admin/tasks/bulk" : "/api/admin/tasks";
+
+      let body;
+      if (tasks.length > 1) {
+        body = payload;
+      } else {
+        const t = payload.tasks[0];
+        body = {
+          project_id: payload.project_id,
+          title: t.title,
+          description: t.description,
+          start_date: t.start_date,
+          due_date: t.due_date,
+          priority: t.priority,
+          assignees: t.assignees,
+        };
+      }
+
+      const res = await fetch(`${BASE}${endpoint}`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: parseInt(projectId),
-          title: title.trim(),
-          description: description.trim() || null,
-          start_date: startDate || null,
-          due_date: dueDate,
-          priority: priority.toLowerCase(),
-          assignees: assignees.map(Number),
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -2186,24 +2234,32 @@ function AddTaskModal({ onClose, onSuccess }) {
       }
       onSuccess?.();
       onClose();
-    } catch (err) { setInlineError(err.message); } finally { setSubmitting(false); }
+    } catch (err) { setInlineError(err.message); }
+    finally { setSubmitting(false); }
   };
 
   const inputCls = "w-full px-3.5 py-2.5 border border-gray-200 rounded-2xl text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all bg-white placeholder:text-gray-400";
   const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5";
+  const validCount = tasks.filter(t =>
+    t.title.trim() && t.dueDate && t.priority && t.assignees.length > 0
+  ).length;
 
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/45 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+
+          {/* Header */}
           <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100 bg-gradient-to-br from-orange-50/60 to-transparent shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200 shrink-0">
                 <Plus size={18} className="text-white" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-gray-900">Add New Task</h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">Fill in the details below</p>
+                <h2 className="text-base font-bold text-gray-900">Add Task{tasks.length > 1 ? "s" : ""}</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {tasks.length > 1 ? `${tasks.length} tasks in this batch` : "Fill in the details below"}
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 text-gray-500 transition ring-1 ring-gray-100 cursor-pointer shrink-0">
@@ -2224,27 +2280,8 @@ function AddTaskModal({ onClose, onSuccess }) {
           )}
 
           <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
-            <div>
-              <label className={labelCls}><FileText size={11} className="text-gray-400" /> Title <span className="text-red-500">*</span></label>
-              <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-                className={inputCls} placeholder="Enter task title" />
-              {apiErrors.title && <p className="text-red-500 text-xs mt-1">{apiErrors.title[0]}</p>}
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}><CalendarDays size={11} className="text-gray-400" /> Start Date</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                  className={`${inputCls} cursor-pointer`} />
-              </div>
-              <div>
-                <label className={labelCls}><CalendarClock size={11} className="text-gray-400" /> Due Date <span className="text-red-500">*</span></label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                  className={`${inputCls} cursor-pointer`} />
-                {apiErrors.due_date && <p className="text-red-500 text-xs mt-1">{apiErrors.due_date[0]}</p>}
-              </div>
-            </div>
-
+            {/* Project selector (shared across all tasks) */}
             <div>
               <label className={labelCls}><Briefcase size={11} className="text-gray-400" /> Project <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
@@ -2270,6 +2307,7 @@ function AddTaskModal({ onClose, onSuccess }) {
               {apiErrors.project_id && <p className="text-red-500 text-xs mt-1">{apiErrors.project_id[0]}</p>}
             </div>
 
+<<<<<<< HEAD
             <div>
               <label className={labelCls}><Users size={11} className="text-gray-400" /> Team Members <span className="text-red-500">*</span></label>
               <UserMultiSelect options={employees} selected={assignees} onChange={setAssignees}
@@ -2289,21 +2327,194 @@ function AddTaskModal({ onClose, onSuccess }) {
                     {p}
                   </button>
                 ))}
+=======
+            {/* Tasks list */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className={labelCls}>
+                  <ListChecks size={11} className="text-gray-400" />
+                  Tasks ({tasks.length})
+                </label>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full ring-1 ring-emerald-100">
+                  {validCount} / {tasks.length} ready
+                </span>
+>>>>>>> bcae2e6 (monday)
               </div>
-              {apiErrors.priority && <p className="text-red-500 text-xs mt-1">{apiErrors.priority[0]}</p>}
+
+              {tasks.map((task, idx) => {
+                const isExpanded = expandedIndex === idx;
+                const taskIsValid = task.title.trim() && task.dueDate && task.priority && task.assignees.length > 0;
+
+                return (
+                  <div key={idx}
+                    className={`rounded-2xl border-2 transition-all ${
+                      isExpanded
+                        ? "border-orange-200 ring-4 ring-orange-50"
+                        : taskIsValid
+                        ? "border-emerald-200 bg-emerald-50/30"
+                        : "border-gray-100"
+                    }`}>
+
+                    {/* Collapsed header */}
+                    <div
+                      className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                      onClick={() => setExpandedIndex(isExpanded ? -1 : idx)}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
+                        taskIsValid ? "bg-emerald-500 text-white" : "bg-orange-100 text-orange-600"
+                      }`}>
+                        {taskIsValid ? <CheckCheck size={14} /> : idx + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold truncate ${task.title ? "text-gray-800" : "text-gray-400"}`}>
+                          {task.title || `Task #${idx + 1}`}
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                          {task.dueDate && <span>Due {task.dueDate}</span>}
+                          {task.priority && (
+                            <span className="capitalize font-semibold" style={{ color: priorityDot[task.priority] ? undefined : "#6b7280" }}>
+                              {task.priority}
+                            </span>
+                          )}
+                          {task.assignees.length > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              <Users size={9} /> {task.assignees.length}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); duplicateTaskRow(idx); }}
+                          title="Duplicate"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition cursor-pointer"
+                        >
+                          <RotateCw size={12} />
+                        </button>
+                        {tasks.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); removeTaskRow(idx); }}
+                            title="Remove"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                        {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                      </div>
+                    </div>
+
+                    {/* Expanded fields */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100">
+                        <div>
+                          <label className={labelCls}><FileText size={11} className="text-gray-400" /> Title <span className="text-red-500">*</span></label>
+                          <input
+                            type="text"
+                            value={task.title}
+                            onChange={e => updateTask(idx, "title", e.target.value)}
+                            className={inputCls}
+                            placeholder={`Task #${idx + 1} title`}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelCls}><CalendarDays size={11} className="text-gray-400" /> Start Date</label>
+                            <input
+                              type="date"
+                              value={task.startDate}
+                              onChange={e => updateTask(idx, "startDate", e.target.value)}
+                              className={`${inputCls} cursor-pointer`}
+                            />
+                          </div>
+                          <div>
+                            <label className={labelCls}><CalendarClock size={11} className="text-gray-400" /> Due Date <span className="text-red-500">*</span></label>
+                            <input
+                              type="date"
+                              value={task.dueDate}
+                              onChange={e => updateTask(idx, "dueDate", e.target.value)}
+                              className={`${inputCls} cursor-pointer`}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className={labelCls}><Users size={11} className="text-gray-400" /> Assignees <span className="text-red-500">*</span></label>
+                          <UserMultiSelect
+                            options={employees}
+                            selected={task.assignees}
+                            onChange={(v) => updateTask(idx, "assignees", v)}
+                            placeholder="Select assignees"
+                            isLoading={loadingEmployees}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={labelCls}><TagIcon size={11} className="text-gray-400" /> Priority <span className="text-red-500">*</span></label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {["low","medium","high","urgent"].map(p => (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => updateTask(idx, "priority", p)}
+                                className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer ${
+                                  task.priority === p ? "border-transparent text-white shadow-md" : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                                }`}
+                                style={task.priority === p ? { backgroundColor: { low:"#10b981", medium:"#f59e0b", high:"#f43f5e", urgent:"#8b5cf6" }[p] } : {}}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${task.priority === p ? "bg-white" : priorityDot[p]}`} />
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className={labelCls}><MessageSquare size={11} className="text-gray-400" /> Description</label>
+                          <textarea
+                            value={task.description}
+                            onChange={e => updateTask(idx, "description", e.target.value)}
+                            rows={2}
+                            className={`${inputCls} resize-none`}
+                            placeholder="Task description..."
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={addTaskRow}
+                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-orange-500 border-2 border-dashed border-orange-200 rounded-2xl hover:bg-orange-50 transition cursor-pointer"
+              >
+                <Plus size={15} /> Add Another Task
+              </button>
             </div>
 
-            <div>
-              <label className={labelCls}><MessageSquare size={11} className="text-gray-400" /> Description</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
-                className={`${inputCls} resize-none`} placeholder="Task description..." />
-            </div>
-
+            {/* Footer buttons */}
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">Cancel</button>
-              <button type="submit" disabled={submitting || !isFormValid}
-                className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer shadow-lg shadow-orange-200 flex items-center gap-2">
-                {submitting ? <><Loader2 size={14} className="animate-spin" />Creating…</> : <><Plus size={14} />Add New Task</>}
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || !projectId || validCount === 0}
+                className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition cursor-pointer shadow-lg shadow-orange-200 flex items-center gap-2"
+              >
+                {submitting
+                  ? <><Loader2 size={14} className="animate-spin" />Creating…</>
+                  : <><Plus size={14} />Create {tasks.length > 1 ? `${tasks.length} Tasks` : "Task"}</>
+                }
               </button>
             </div>
           </form>
@@ -2314,7 +2525,7 @@ function AddTaskModal({ onClose, onSuccess }) {
         <div className="fixed inset-0 z-[100]">
           <AddProjectModal
             onClose={() => setShowAddProjectModal(false)}
-            onSuccess={(msg) => {
+            onSuccess={() => {
               handleProjectAdded();
               setShowAddProjectModal(false);
             }}
