@@ -2307,27 +2307,6 @@ function AddTaskModal({ onClose, onSuccess }) {
               {apiErrors.project_id && <p className="text-red-500 text-xs mt-1">{apiErrors.project_id[0]}</p>}
             </div>
 
-<<<<<<< HEAD
-            <div>
-              <label className={labelCls}><Users size={11} className="text-gray-400" /> Team Members <span className="text-red-500">*</span></label>
-              <UserMultiSelect options={employees} selected={assignees} onChange={setAssignees}
-                placeholder="Select team members" isLoading={loadingEmployees} />
-              {apiErrors.assignees && <p className="text-red-500 text-xs mt-1">{apiErrors.assignees[0]}</p>}
-            </div>
-
-            <div>
-              <label className={labelCls}><TagIcon size={11} className="text-gray-400" /> Priority <span className="text-red-500">*</span></label>
-              <div className="grid grid-cols-4 gap-2">
-                {["low","medium","high","urgent"].map(p => (
-                  <button key={p} type="button" onClick={() => setPriority(p)}
-                    className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer
-                      ${priority === p ? "border-transparent text-white shadow-md" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-                    style={priority === p ? { backgroundColor: { low:"#10b981", medium:"#f59e0b", high:"#f43f5e", urgent:"#8b5cf6" }[p] } : {}}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${priority === p ? "bg-white" : priorityDot[p]}`} />
-                    {p}
-                  </button>
-                ))}
-=======
             {/* Tasks list */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -2338,7 +2317,6 @@ function AddTaskModal({ onClose, onSuccess }) {
                 <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full ring-1 ring-emerald-100">
                   {validCount} / {tasks.length} ready
                 </span>
->>>>>>> bcae2e6 (monday)
               </div>
 
               {tasks.map((task, idx) => {
