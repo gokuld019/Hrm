@@ -3,11 +3,20 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
+
+// ⭐ JSON headers
 const HEADERS = () => ({
   "Authorization": `Bearer ${localStorage.getItem("employee_auth_token")}`,
   "ngrok-skip-browser-warning": "true",
   "Accept": "application/json",
   "Content-Type": "application/json",
+});
+
+// ⭐ Multipart headers — DO NOT set Content-Type (browser sets boundary)
+const HEADERS_MULTIPART = () => ({
+  "Authorization": `Bearer ${localStorage.getItem("employee_auth_token")}`,
+  "ngrok-skip-browser-warning": "true",
+  "Accept": "application/json",
 });
 
 const Ico = ({ d, size = 16, stroke = "currentColor", sw = 1.8, fill = "none", style = {} }) => (
@@ -52,6 +61,11 @@ const I = {
   trash:      "M3 6h18 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6 M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2",
   pencil:     "M12 20h9 M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z",
   lock:       "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4",
+  // ⭐ new icons for attachment
+  paperclip:  "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
+  image:      "M3 3h18v18H3z M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
+  upload:     "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
+  download:   "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
 };
 
 const PRIORITY_CFG = {
@@ -88,7 +102,6 @@ const resolveMyStatus = (task) => {
   return raw;
 };
 
-// ⭐ Get current user info from localStorage
 const getCurrentUser = () => {
   try {
     const raw = localStorage.getItem("auth_user");
@@ -96,21 +109,29 @@ const getCurrentUser = () => {
   } catch { return null; }
 };
 
-// ⭐ Can I edit/delete this task?
 const canManageTask = (task, currentUserId) => {
   if (!task || !currentUserId) return false;
-  // Only tasks created by me
   if (task.created_by !== currentUserId) return false;
-  // Cannot manage completed tasks
   if (task.status === "completed") return false;
   return true;
 };
 
-// ⭐ Can I delete this task? (stricter — only pending)
 const canDeleteTask = (task, currentUserId) => {
   if (!canManageTask(task, currentUserId)) return false;
   return task.status === "pending";
 };
+
+// ⭐ Helper: format bytes
+const formatBytes = (b) => {
+  if (!b) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(b) / Math.log(k));
+  return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
+
+// ⭐ Helper: is image URL?
+const isImage = (path) => /\.(jpg|jpeg|png|gif|webp)$/i.test(path || "");
 
 const Spinner = ({ size = 20, color = "#f97316" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", display: "block" }}>
@@ -128,7 +149,7 @@ function SBadge({ s }) {
 }
 
 // ⭐═══════════════════════════════════════════════════════════════════════════
-// ADD / EDIT TASK MODAL — Employee creates/updates own task
+// ADD / EDIT TASK MODAL
 // ⭐═══════════════════════════════════════════════════════════════════════════
 function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, editingTask = null }) {
   const isEdit = !!editingTask;
@@ -148,7 +169,6 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
 
   const selectedProject = availableProjects.find(p => p.id === projectId);
 
-  // Auto-select if only 1 project & creating new
   useEffect(() => {
     if (!isEdit && availableProjects.length === 1 && !projectId) {
       setProjectId(availableProjects[0].id);
@@ -157,18 +177,13 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
 
   const handleSubmit = async () => {
     setInlineError(null);
-
-    if (!title.trim()) {
-      setInlineError("Task title is required");
-      return;
-    }
+    if (!title.trim()) { setInlineError("Task title is required"); return; }
 
     setSubmitting(true);
     try {
       const url = isEdit
         ? `${BASE}/api/employee/tasks/${editingTask.id}`
         : `${BASE}/api/employee/tasks`;
-
       const method = isEdit ? "PUT" : "POST";
 
       const body = {
@@ -178,18 +193,9 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
         start_date: startDate || null,
         due_date: dueDate || null,
       };
+      if (!isEdit) body.project_id = projectId || null;
 
-      // ⭐ Only send project_id when creating (cannot change project on edit)
-      if (!isEdit) {
-        body.project_id = projectId || null;
-      }
-
-      const res = await fetch(url, {
-        method,
-        headers: HEADERS(),
-        body: JSON.stringify(body),
-      });
-
+      const res = await fetch(url, { method, headers: HEADERS(), body: JSON.stringify(body) });
       const data = await res.json();
 
       if (!res.ok) {
@@ -213,117 +219,54 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, animation: "fadeIn 0.15s ease",
-      }}
+      style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, animation: "fadeIn 0.15s ease" }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 520,
-          background: "#fff", borderRadius: 20,
-          boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
-          overflow: "hidden",
-          animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
-          maxHeight: "90vh", display: "flex", flexDirection: "column",
-        }}
-      >
-        {/* Header */}
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden", animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", flexShrink: 0, background: isEdit ? "linear-gradient(135deg, #eff6ff, #fff)" : "linear-gradient(135deg, #fff7ed, #fff)" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 13,
-              background: isEdit
-                ? "linear-gradient(135deg, #3b82f6, #2563eb)"
-                : "linear-gradient(135deg, #f97316, #ea580c)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: isEdit ? "0 6px 20px #3b82f644" : "0 6px 20px #f9731644", flexShrink: 0,
-            }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: isEdit ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "linear-gradient(135deg, #f97316, #ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: isEdit ? "0 6px 20px #3b82f644" : "0 6px 20px #f9731644", flexShrink: 0 }}>
               <Ico d={isEdit ? I.pencil : I.plus} size={20} stroke="#fff" sw={2.5} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.2px" }}>
-                {isEdit ? "Edit Task" : "Create New Task"}
-              </h3>
-              <p style={{ margin: "3px 0 0", fontSize: 11.5, color: "#94a3b8", fontWeight: 500 }}>
-                {isEdit ? `Task #${editingTask.id}` : "Add a task to your workflow"}
-              </p>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.2px" }}>{isEdit ? "Edit Task" : "Create New Task"}</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 11.5, color: "#94a3b8", fontWeight: 500 }}>{isEdit ? `Task #${editingTask.id}` : "Add a task to your workflow"}</p>
             </div>
-            <button
-              onClick={onClose}
-              disabled={submitting}
-              style={{
-                width: 32, height: 32, borderRadius: 9,
-                background: "#fff", border: "1px solid #e5e7eb",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: submitting ? "not-allowed" : "pointer", flexShrink: 0,
-                opacity: submitting ? 0.5 : 1,
-              }}
-            >
+            <button onClick={onClose} disabled={submitting} style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: submitting ? "not-allowed" : "pointer", flexShrink: 0, opacity: submitting ? 0.5 : 1 }}>
               <Ico d={I.x} size={14} stroke="#6b7280" />
             </button>
           </div>
         </div>
 
-        {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
           {inlineError && (
-            <div style={{
-              display: "flex", alignItems: "flex-start", gap: 8,
-              padding: "10px 14px", background: "#fef2f2",
-              border: "1px solid #fecaca", borderRadius: 10,
-              fontSize: 12, color: "#b91c1c", marginBottom: 16,
-            }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, fontSize: 12, color: "#b91c1c", marginBottom: 16 }}>
               <Ico d={I.alertCircle} size={13} stroke="#dc2626" sw={2.2} style={{ marginTop: 1 }} />
               <span>{inlineError}</span>
             </div>
           )}
 
-          {/* Project selector (only on create) */}
           {!isEdit && (
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-                <Ico d={I.folder} size={11} stroke="#6b7280" sw={2.2} />
-                Project
+                <Ico d={I.folder} size={11} stroke="#6b7280" sw={2.2} /> Project
                 <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional)</span>
               </label>
-
               {loadingProjects ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: "#f9fafb", borderRadius: 12, border: "1px solid #e5e7eb" }}>
-                  <Spinner size={14} />
-                  <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading projects…</span>
+                  <Spinner size={14} /><span style={{ fontSize: 12, color: "#94a3b8" }}>Loading projects…</span>
                 </div>
               ) : (
-                <select
-                  value={projectId}
-                  onChange={e => setProjectId(e.target.value)}
-                  disabled={submitting}
-                  style={{
-                    width: "100%", padding: "11px 14px",
-                    borderRadius: 12, fontSize: 13,
-                    border: "1.5px solid #e5e7eb",
-                    background: "#fff", color: "#1e293b",
-                    outline: "none", cursor: "pointer",
-                    fontFamily: "inherit", fontWeight: 500,
-                  }}
-                >
-                  {availableProjects.map(p => (
-                    <option key={p.id} value={p.id}>📁 {p.project_name} ({p.project_code})</option>
-                  ))}
+                <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={submitting} style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
+                  {availableProjects.map(p => (<option key={p.id} value={p.id}>📁 {p.project_name} ({p.project_code})</option>))}
                 </select>
               )}
             </div>
           )}
 
-          {/* Edit mode — show project name (read-only) */}
           {isEdit && editingTask?.project && (
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-                <Ico d={I.folder} size={11} stroke="#6b7280" sw={2.2} />
-                Project
+                <Ico d={I.folder} size={11} stroke="#6b7280" sw={2.2} /> Project
                 <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(cannot change)</span>
               </label>
               <div style={{ padding: "11px 14px", background: "#f9fafb", borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 13, color: "#6b7280", fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
@@ -333,191 +276,62 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
             </div>
           )}
 
-          {/* Project details preview (create mode) */}
-          {!isEdit && selectedProject && (
-            <div style={{
-              padding: "12px 14px",
-              background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
-              border: "1px solid #fed7aa",
-              borderRadius: 12, marginBottom: 16,
-              animation: "fadeIn 0.2s ease",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #f97316, #ea580c)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Ico d={I.briefcase} size={13} stroke="#fff" sw={2.2} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedProject.project_name}</div>
-                  <div style={{ fontSize: 10.5, color: "#ea580c", fontWeight: 700 }}>{selectedProject.project_code}</div>
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
-                {selectedProject.client?.company_name && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#78350f" }}>
-                    <Ico d={I.building} size={10} stroke="#a16207" sw={2.2} />
-                    <span style={{ fontWeight: 600 }}>{selectedProject.client.company_name}</span>
-                  </div>
-                )}
-                {selectedProject.end_date && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#78350f" }}>
-                    <Ico d={I.calendar} size={10} stroke="#a16207" sw={2.2} />
-                    <span style={{ fontWeight: 600 }}>Due {new Date(selectedProject.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
-                  </div>
-                )}
-                {selectedProject.priority && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#78350f" }}>
-                    <Ico d={I.tag} size={10} stroke="#a16207" sw={2.2} />
-                    <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{selectedProject.priority}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Title */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-              <Ico d={I.fileText} size={11} stroke="#6b7280" sw={2.2} />
-              Task Title <span style={{ color: "#ef4444" }}>*</span>
+              <Ico d={I.fileText} size={11} stroke="#6b7280" sw={2.2} /> Task Title <span style={{ color: "#ef4444" }}>*</span>
             </label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              disabled={submitting}
-              placeholder="e.g. Fix homepage hero section"
-              maxLength={255}
-              autoFocus
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
-              onFocus={e => e.currentTarget.style.borderColor = "#f97316"}
-              onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"}
-            />
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} disabled={submitting} placeholder="e.g. Fix homepage hero section" maxLength={255} autoFocus style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+              onFocus={e => e.currentTarget.style.borderColor = "#f97316"} onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"} />
           </div>
 
-          {/* Description */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-              <Ico d={I.messageSquare} size={11} stroke="#6b7280" sw={2.2} />
-              Description
+              <Ico d={I.messageSquare} size={11} stroke="#6b7280" sw={2.2} /> Description
               <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional)</span>
             </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              disabled={submitting}
-              placeholder="Add more details…"
-              rows={3}
-              maxLength={1000}
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", resize: "vertical", minHeight: 80, maxHeight: 180, boxSizing: "border-box" }}
-              onFocus={e => e.currentTarget.style.borderColor = "#f97316"}
-              onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"}
-            />
+            <textarea value={description} onChange={e => setDescription(e.target.value)} disabled={submitting} placeholder="Add more details…" rows={3} maxLength={1000} style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", resize: "vertical", minHeight: 80, maxHeight: 180, boxSizing: "border-box" }}
+              onFocus={e => e.currentTarget.style.borderColor = "#f97316"} onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"} />
           </div>
 
-          {/* Priority */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-              <Ico d={I.tag} size={11} stroke="#6b7280" sw={2.2} />
-              Priority
+              <Ico d={I.tag} size={11} stroke="#6b7280" sw={2.2} /> Priority
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
               {["low", "medium", "high", "urgent"].map(p => {
                 const c = PRIORITY_CFG[p];
                 const active = priority === p;
                 return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPriority(p)}
-                    disabled={submitting}
-                    style={{
-                      padding: "8px 6px", borderRadius: 10,
-                      fontSize: 11.5, fontWeight: 700, textTransform: "capitalize",
-                      border: `1.5px solid ${active ? c.dot : "#e5e7eb"}`,
-                      background: active ? c.bg : "#fff",
-                      color: active ? c.text : "#6b7280",
-                      cursor: submitting ? "not-allowed" : "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                      opacity: submitting ? 0.6 : 1,
-                    }}
-                  >
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />
-                    {p}
+                  <button key={p} type="button" onClick={() => setPriority(p)} disabled={submitting} style={{ padding: "8px 6px", borderRadius: 10, fontSize: 11.5, fontWeight: 700, textTransform: "capitalize", border: `1.5px solid ${active ? c.dot : "#e5e7eb"}`, background: active ? c.bg : "#fff", color: active ? c.text : "#6b7280", cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, opacity: submitting ? 0.6 : 1 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />{p}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Dates */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-                <Ico d={I.calendar} size={11} stroke="#6b7280" sw={2.2} />
-                Start Date
+                <Ico d={I.calendar} size={11} stroke="#6b7280" sw={2.2} /> Start Date
               </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                disabled={submitting}
-                style={{ width: "100%", padding: "11px 12px", borderRadius: 12, fontSize: 12.5, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", cursor: "pointer", boxSizing: "border-box" }}
-                onFocus={e => e.currentTarget.style.borderColor = "#f97316"}
-                onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"}
-              />
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={submitting} style={{ width: "100%", padding: "11px 12px", borderRadius: 12, fontSize: 12.5, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", cursor: "pointer", boxSizing: "border-box" }}
+                onFocus={e => e.currentTarget.style.borderColor = "#f97316"} onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"} />
             </div>
             <div>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-                <Ico d={I.calendar} size={11} stroke="#6b7280" sw={2.2} />
-                Due Date
+                <Ico d={I.calendar} size={11} stroke="#6b7280" sw={2.2} /> Due Date
               </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                disabled={submitting}
-                min={startDate || undefined}
-                style={{ width: "100%", padding: "11px 12px", borderRadius: 12, fontSize: 12.5, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", cursor: "pointer", boxSizing: "border-box" }}
-                onFocus={e => e.currentTarget.style.borderColor = "#f97316"}
-                onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"}
-              />
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={submitting} min={startDate || undefined} style={{ width: "100%", padding: "11px 12px", borderRadius: 12, fontSize: 12.5, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", cursor: "pointer", boxSizing: "border-box" }}
+                onFocus={e => e.currentTarget.style.borderColor = "#f97316"} onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"} />
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div style={{ padding: "14px 24px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", justifyContent: "flex-end", gap: 10, flexShrink: 0 }}>
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            style={{ padding: "10px 20px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1 }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !title.trim()}
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "10px 20px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
-              border: "none",
-              background: (submitting || !title.trim())
-                ? "#e5e7eb"
-                : isEdit
-                  ? "linear-gradient(135deg, #3b82f6, #2563eb)"
-                  : "linear-gradient(135deg, #f97316, #ea580c)",
-              color: (submitting || !title.trim()) ? "#9ca3af" : "#fff",
-              cursor: (submitting || !title.trim()) ? "not-allowed" : "pointer",
-              boxShadow: (submitting || !title.trim()) ? "none" : isEdit ? "0 6px 18px #3b82f644" : "0 6px 18px #f9731644",
-            }}
-          >
-            {submitting ? (
-              <><Spinner size={14} color="#fff" /> {isEdit ? "Saving…" : "Creating…"}</>
-            ) : isEdit ? (
-              <><Ico d={I.check} size={13} stroke="#fff" sw={2.8} /> Save Changes</>
-            ) : (
-              <><Ico d={I.plus} size={13} stroke="#fff" sw={2.5} /> Create Task</>
-            )}
+          <button onClick={onClose} disabled={submitting} style={{ padding: "10px 20px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1 }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={submitting || !title.trim()} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 20px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, border: "none", background: (submitting || !title.trim()) ? "#e5e7eb" : isEdit ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "linear-gradient(135deg, #f97316, #ea580c)", color: (submitting || !title.trim()) ? "#9ca3af" : "#fff", cursor: (submitting || !title.trim()) ? "not-allowed" : "pointer", boxShadow: (submitting || !title.trim()) ? "none" : isEdit ? "0 6px 18px #3b82f644" : "0 6px 18px #f9731644" }}>
+            {submitting ? (<><Spinner size={14} color="#fff" /> {isEdit ? "Saving…" : "Creating…"}</>) : isEdit ? (<><Ico d={I.check} size={13} stroke="#fff" sw={2.8} /> Save Changes</>) : (<><Ico d={I.plus} size={13} stroke="#fff" sw={2.5} /> Create Task</>)}
           </button>
         </div>
       </div>
@@ -528,58 +342,21 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
 // ─── DELETE CONFIRM MODAL ───────────────────────────────────────────────
 function DeleteConfirmModal({ task, onConfirm, onCancel, deleting }) {
   if (!task) return null;
-
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget && !deleting) onCancel(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 350,
-        background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, animation: "fadeIn 0.15s ease",
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 420,
-          background: "#fff", borderRadius: 20,
-          boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
-          overflow: "hidden",
-          animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
-        }}
-      >
+    <div onClick={(e) => { if (e.target === e.currentTarget && !deleting) onCancel(); }} style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, animation: "fadeIn 0.15s ease" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden", animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)" }}>
         <div style={{ padding: "24px 24px 20px" }}>
           <div style={{ width: 48, height: 48, borderRadius: 14, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, boxShadow: "0 6px 20px #ef444433" }}>
             <Ico d={I.trash} size={22} stroke="#dc2626" sw={2.2} />
           </div>
-          <h3 style={{ margin: "0 0 8px", fontSize: 17, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.2px" }}>
-            Delete this task?
-          </h3>
-          <p style={{ margin: "0 0 4px", fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
-            You're about to delete:
-          </p>
-          <div style={{ padding: "10px 12px", background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13, fontWeight: 600, color: "#1e293b", marginBottom: 12 }}>
-            {task.title}
-          </div>
-          <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
-            This action cannot be undone.
-          </p>
+          <h3 style={{ margin: "0 0 8px", fontSize: 17, fontWeight: 800, color: "#0f172a" }}>Delete this task?</h3>
+          <p style={{ margin: "0 0 4px", fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>You're about to delete:</p>
+          <div style={{ padding: "10px 12px", background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13, fontWeight: 600, color: "#1e293b", marginBottom: 12 }}>{task.title}</div>
+          <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>This action cannot be undone.</p>
         </div>
-
         <div style={{ padding: "14px 24px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            style={{ padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.5 : 1 }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, border: "none", background: deleting ? "#e5e7eb" : "linear-gradient(135deg, #ef4444, #dc2626)", color: deleting ? "#9ca3af" : "#fff", cursor: deleting ? "not-allowed" : "pointer", boxShadow: deleting ? "none" : "0 6px 18px #ef444444" }}
-          >
+          <button onClick={onCancel} disabled={deleting} style={{ padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.5 : 1 }}>Cancel</button>
+          <button onClick={onConfirm} disabled={deleting} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, border: "none", background: deleting ? "#e5e7eb" : "linear-gradient(135deg, #ef4444, #dc2626)", color: deleting ? "#9ca3af" : "#fff", cursor: deleting ? "not-allowed" : "pointer", boxShadow: deleting ? "none" : "0 6px 18px #ef444444" }}>
             {deleting ? <><Spinner size={14} color="#fff" /> Deleting…</> : <><Ico d={I.trash} size={13} stroke="#fff" sw={2.2} /> Delete Task</>}
           </button>
         </div>
@@ -588,16 +365,30 @@ function DeleteConfirmModal({ task, onConfirm, onCancel, deleting }) {
   );
 }
 
-// ─── Status Change Modal ────────────────────────────────────────────────
+// ⭐═══════════════════════════════════════════════════════════════════════════
+// STATUS CHANGE MODAL — with IMAGE UPLOAD + PREVIEW
+// ⭐═══════════════════════════════════════════════════════════════════════════
 function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, onCancel, submitting }) {
   const [notes, setNotes] = useState("");
   const [touched, setTouched] = useState(false);
+  const [attachment, setAttachment] = useState(null);       // File object
+  const [previewUrl, setPreviewUrl] = useState(null);       // Object URL
+  const [uploadError, setUploadError] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+  const ACCEPTED = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"];
 
   useEffect(() => {
     if (isOpen) {
       setNotes("");
       setTouched(false);
+      setAttachment(null);
+      setPreviewUrl(null);
+      setUploadError(null);
+      setIsDragging(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -607,6 +398,11 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
   }, [isOpen, submitting, onCancel]);
+
+  // Cleanup object URL
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
 
   if (!isOpen || !task) return null;
 
@@ -622,10 +418,43 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
   const isRequired = isReopening;
   const canSubmit = !submitting && (!isRequired || notes.trim().length >= 3);
 
+  // ⭐ File validation + preview
+  const handleFile = (file) => {
+    setUploadError(null);
+    if (!file) return;
+    if (!ACCEPTED.includes(file.type)) {
+      setUploadError("Only JPG, PNG, GIF, WEBP, or PDF files allowed.");
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      setUploadError(`File too large (max ${formatBytes(MAX_SIZE)}).`);
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setAttachment(file);
+    setPreviewUrl(file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+  };
+
+  const handleRemoveFile = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setAttachment(null);
+    setPreviewUrl(null);
+    setUploadError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
   const handleSubmit = () => {
     setTouched(true);
     if (!canSubmit) return;
-    onConfirm(notes.trim() || null);
+    // ⭐ Pass notes + file up to parent
+    onConfirm(notes.trim() || null, attachment);
   };
 
   return (
@@ -635,9 +464,9 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden", animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)" }}
+        style={{ width: "100%", maxWidth: 500, background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden", animation: "modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}
       >
-        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9" }}>
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg, ${newCfg.col}, ${newCfg.col}dd)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 6px 20px ${newCfg.col}44`, flexShrink: 0 }}>
               <Ico d={I.edit3} size={19} stroke="#fff" sw={2.2} />
@@ -651,12 +480,14 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
             </button>
           </div>
         </div>
-        <div style={{ padding: "20px 24px" }}>
+
+        <div style={{ padding: "20px 24px", overflowY: "auto", flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 14, background: "linear-gradient(135deg, #f8fafc, #f1f5f9)", border: "1px solid #e2e8f0", marginBottom: 20 }}>
             <SBadge s={currentStatus} />
             <Ico d={I.chevRight} size={14} stroke="#94a3b8" sw={2.2} />
             <SBadge s={newStatus} />
           </div>
+
           <label style={{ display: "block", marginBottom: 8 }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#374151" }}>
               <Ico d={I.messageSquare} size={12} stroke="#6b7280" sw={2.2} />
@@ -671,23 +502,102 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
             onBlur={() => setTouched(true)}
             disabled={submitting}
             placeholder={notesPlaceholder}
-            rows={4}
+            rows={3}
             maxLength={1000}
-            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, fontSize: 13, lineHeight: 1.5, border: `1.5px solid ${touched && isRequired && notes.trim().length < 3 ? "#fca5a5" : "#e5e7eb"}`, outline: "none", resize: "vertical", fontFamily: "inherit", background: submitting ? "#f9fafb" : "#fff", color: "#1e293b", boxSizing: "border-box", minHeight: 100, maxHeight: 240 }}
+            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, fontSize: 13, lineHeight: 1.5, border: `1.5px solid ${touched && isRequired && notes.trim().length < 3 ? "#fca5a5" : "#e5e7eb"}`, outline: "none", resize: "vertical", fontFamily: "inherit", background: submitting ? "#f9fafb" : "#fff", color: "#1e293b", boxSizing: "border-box", minHeight: 80, maxHeight: 200 }}
           />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 20 }}>
             <span style={{ fontSize: 11, color: touched && isRequired && notes.trim().length < 3 ? "#dc2626" : "#94a3b8", fontWeight: touched && isRequired && notes.trim().length < 3 ? 600 : 400 }}>
               {isRequired && notes.trim().length < 3 ? "⚠️ Minimum 3 characters required" : "💡 Optional"}
             </span>
             <span style={{ fontSize: 10.5, color: "#cbd5e1", fontWeight: 600 }}>{notes.length}/1000</span>
           </div>
+
+          {/* ⭐═══════════ ATTACHMENT UPLOAD ═══════════ */}
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+              <Ico d={I.paperclip} size={12} stroke="#6b7280" sw={2.2} />
+              Attachment
+              <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional · max 5MB)</span>
+            </label>
+
+            {!attachment ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                style={{
+                  border: `2px dashed ${isDragging ? newCfg.col : "#cbd5e1"}`,
+                  background: isDragging ? `${newCfg.col}0D` : "#f9fafb",
+                  borderRadius: 12,
+                  padding: "22px 16px",
+                  textAlign: "center",
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  transition: "all 0.18s ease",
+                }}
+              >
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: isDragging ? `${newCfg.col}22` : "#e0e7ff", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+                  <Ico d={I.upload} size={18} stroke={isDragging ? newCfg.col : "#4f46e5"} sw={2.2} />
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1e293b", marginBottom: 3 }}>
+                  {isDragging ? "Drop file here" : "Click or drag & drop"}
+                </div>
+                <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  JPG, PNG, GIF, WEBP or PDF · max 5MB
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                  onChange={(e) => handleFile(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                  disabled={submitting}
+                />
+              </div>
+            ) : (
+              <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 12, background: "#fff", overflow: "hidden" }}>
+                {previewUrl ? (
+                  <div style={{ position: "relative", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 220 }}>
+                    <img src={previewUrl} alt="preview" style={{ maxWidth: "100%", maxHeight: 220, display: "block", objectFit: "contain" }} />
+                  </div>
+                ) : (
+                  <div style={{ padding: "20px 16px", display: "flex", alignItems: "center", gap: 12, background: "#fef2f2" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Ico d={I.fileText} size={18} stroke="#dc2626" sw={2.2} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.name}</div>
+                      <div style={{ fontSize: 10.5, color: "#94a3b8", fontWeight: 500 }}>PDF · {formatBytes(attachment.size)}</div>
+                    </div>
+                  </div>
+                )}
+                <div style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#fafbfc" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.name}</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 500 }}>{formatBytes(attachment.size)}</div>
+                  </div>
+                  <button type="button" onClick={handleRemoveFile} disabled={submitting} title="Remove attachment" style={{ width: 28, height: 28, borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "center", justifyContent: "center", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1 }}>
+                    <Ico d={I.x} size={12} stroke="#dc2626" sw={2.4} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {uploadError && (
+              <div style={{ marginTop: 8, display: "flex", alignItems: "flex-start", gap: 6, padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, fontSize: 11.5, color: "#b91c1c" }}>
+                <Ico d={I.alertCircle} size={12} stroke="#dc2626" sw={2.2} style={{ marginTop: 1 }} />
+                <span>{uploadError}</span>
+              </div>
+            )}
+          </div>
+          {/* ⭐═══════════ END ATTACHMENT ═══════════ */}
         </div>
-        <div style={{ padding: "14px 24px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button onClick={onCancel} disabled={submitting} style={{ padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1 }}>
-            Cancel
-          </button>
+
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #f1f5f9", background: "#fafbfc", display: "flex", justifyContent: "flex-end", gap: 10, flexShrink: 0 }}>
+          <button onClick={onCancel} disabled={submitting} style={{ padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1 }}>Cancel</button>
           <button onClick={handleSubmit} disabled={!canSubmit} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, border: "none", background: canSubmit ? `linear-gradient(135deg, ${newCfg.col}, ${newCfg.col}dd)` : "#e5e7eb", color: canSubmit ? "#fff" : "#9ca3af", cursor: canSubmit ? "pointer" : "not-allowed", boxShadow: canSubmit ? `0 6px 18px ${newCfg.col}44` : "none" }}>
-            {submitting ? <><Spinner size={14} color="#fff" /> Saving…</> : <><Ico d={I.send} size={13} stroke="#fff" sw={2.2} /> Confirm</>}
+            {submitting ? <><Spinner size={14} color="#fff" /> {attachment ? "Uploading…" : "Saving…"}</> : <><Ico d={I.send} size={13} stroke="#fff" sw={2.2} /> Confirm</>}
           </button>
         </div>
       </div>
@@ -695,13 +605,16 @@ function StatusChangeModal({ isOpen, task, currentStatus, newStatus, onConfirm, 
   );
 }
 
-// ─── Activity Timeline ──────────────────────────────────────────────────
+// ⭐═══════════════════════════════════════════════════════════════════════════
+// Activity Timeline — now shows attachment preview / download link
+// ⭐═══════════════════════════════════════════════════════════════════════════
 function ActivityTimeline({ logs, loading }) {
+  const [previewLog, setPreviewLog] = useState(null);
+
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: 24 }}>
-        <Spinner size={16} />
-        <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading activity…</span>
+        <Spinner size={16} /><span style={{ fontSize: 12, color: "#94a3b8" }}>Loading activity…</span>
       </div>
     );
   }
@@ -716,35 +629,95 @@ function ActivityTimeline({ logs, loading }) {
   }
 
   return (
-    <div style={{ position: "relative", paddingLeft: 22 }}>
-      <div style={{ position: "absolute", left: 8, top: 10, bottom: 10, width: 2, background: "#e5e7eb", borderRadius: 1 }} />
-      {logs.map((log, idx) => {
-        const toCfg = STATUS_CFG[statusKey(log.to_status)];
-        const fromCfg = log.from_status ? STATUS_CFG[statusKey(log.from_status)] : null;
-        const date = log.changed_at ? new Date(log.changed_at) : null;
-        return (
-          <div key={log.id} style={{ position: "relative", paddingBottom: idx === logs.length - 1 ? 0 : 16 }}>
-            <div style={{ position: "absolute", left: -22, top: 3, width: 16, height: 16, borderRadius: "50%", background: toCfg.dot, border: "3px solid #fff", boxShadow: `0 0 0 1.5px ${toCfg.dot}44` }} />
-            <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: log.notes ? 8 : 4 }}>
-                {fromCfg ? <><SBadge s={log.from_status} /><Ico d={I.chevRight} size={11} stroke="#94a3b8" sw={2.2} /><SBadge s={log.to_status} /></> : <span style={{ fontSize: 11, fontWeight: 700, color: toCfg.text }}>Assigned as <strong>{toCfg.label}</strong></span>}
-              </div>
-              {log.notes && (
-                <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.55, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", whiteSpace: "pre-wrap", marginBottom: 6 }}>{log.notes}</div>
-              )}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 10, color: "#94a3b8", fontWeight: 500 }}>
-                {log.employee && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Ico d={I.user} size={10} stroke="#94a3b8" />{log.employee.name}</span>}
-                {date && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Ico d={I.clock} size={10} stroke="#94a3b8" />{date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} · {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>}
+    <>
+      <div style={{ position: "relative", paddingLeft: 22 }}>
+        <div style={{ position: "absolute", left: 8, top: 10, bottom: 10, width: 2, background: "#e5e7eb", borderRadius: 1 }} />
+        {logs.map((log, idx) => {
+          const toCfg = STATUS_CFG[statusKey(log.to_status)];
+          const fromCfg = log.from_status ? STATUS_CFG[statusKey(log.from_status)] : null;
+          const date = log.changed_at ? new Date(log.changed_at) : null;
+          const attUrl = log.attachment_url;
+          const attImg = attUrl && isImage(attUrl);
+
+          return (
+            <div key={log.id} style={{ position: "relative", paddingBottom: idx === logs.length - 1 ? 0 : 16 }}>
+              <div style={{ position: "absolute", left: -22, top: 3, width: 16, height: 16, borderRadius: "50%", background: toCfg.dot, border: "3px solid #fff", boxShadow: `0 0 0 1.5px ${toCfg.dot}44` }} />
+              <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: log.notes || attUrl ? 8 : 4 }}>
+                  {fromCfg ? <><SBadge s={log.from_status} /><Ico d={I.chevRight} size={11} stroke="#94a3b8" sw={2.2} /><SBadge s={log.to_status} /></> : <span style={{ fontSize: 11, fontWeight: 700, color: toCfg.text }}>Assigned as <strong>{toCfg.label}</strong></span>}
+                </div>
+
+                {log.notes && (
+                  <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.55, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", whiteSpace: "pre-wrap", marginBottom: attUrl ? 8 : 6 }}>{log.notes}</div>
+                )}
+
+                {/* ⭐ ATTACHMENT PREVIEW */}
+                {attUrl && (
+                  attImg ? (
+                    <div
+                      onClick={() => setPreviewLog(log)}
+                      style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#0f172a", cursor: "pointer", marginBottom: 6, maxHeight: 160 }}
+                    >
+                      <img src={attUrl} alt="attachment" style={{ width: "100%", maxHeight: 160, display: "block", objectFit: "cover" }} />
+                      <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(15,23,42,0.75)", borderRadius: 8, padding: "4px 8px", display: "flex", alignItems: "center", gap: 4 }}>
+                        <Ico d={I.eye} size={11} stroke="#fff" sw={2.2} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#fff" }}>View</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <a
+                      href={attUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", textDecoration: "none", marginBottom: 6 }}
+                    >
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Ico d={I.fileText} size={14} stroke="#dc2626" sw={2.2} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, color: "#1e293b" }}>Attachment</div>
+                        <div style={{ fontSize: 10, color: "#94a3b8" }}>Click to open</div>
+                      </div>
+                      <Ico d={I.download} size={14} stroke="#6b7280" sw={2.2} />
+                    </a>
+                  )
+                )}
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 10, color: "#94a3b8", fontWeight: 500 }}>
+                  {log.employee && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Ico d={I.user} size={10} stroke="#94a3b8" />{log.employee.name}</span>}
+                  {date && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Ico d={I.clock} size={10} stroke="#94a3b8" />{date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} · {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/* ⭐ Full-screen image preview modal */}
+      {previewLog && (
+        <div
+          onClick={() => setPreviewLog(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, animation: "fadeIn 0.15s ease" }}
+        >
+          <button
+            onClick={() => setPreviewLog(null)}
+            style={{ position: "absolute", top: 20, right: 20, width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          >
+            <Ico d={I.x} size={20} stroke="#fff" sw={2.2} />
+          </button>
+          <img
+            src={previewLog.attachment_url}
+            alt="preview"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 12, boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
-// ─── Task Row (with edit/delete on own tasks) ─────────────────────────
+// ─── Task Row ─────────────────────────────────────────────────────────
 function TaskRow({ t, isDone, onToggle, onOpen, onEdit, onDelete, currentUserId }) {
   const st = resolveMyStatus(t);
   const pc = PRIORITY_CFG[priorityKey(t.priority)] || PRIORITY_CFG.medium;
@@ -762,53 +735,37 @@ function TaskRow({ t, isDone, onToggle, onOpen, onEdit, onDelete, currentUserId 
       <div onClick={(e) => { e.stopPropagation(); onToggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
         {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
       </div>
-
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 13, color: done ? "#94a3b8" : "#1e293b", fontWeight: 600, textDecoration: done ? "line-through" : "none" }}>{t.title}</span>
         {t.description && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</div>}
       </div>
-
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {canManage && (
           <span title="You created this task" style={{ fontSize: 9.5, color: "#7c3aed", background: "#f5f3ff", padding: "2px 7px", borderRadius: 10, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
-            <Ico d={I.user} size={9} stroke="#7c3aed" sw={2.5} />
-            Mine
+            <Ico d={I.user} size={9} stroke="#7c3aed" sw={2.5} /> Mine
           </span>
         )}
         <PBadge p={t.priority} />
         <SBadge s={st} />
         {t.due_date && <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400 }}><Ico d={I.calendar} size={11} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />{new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>}
       </div>
-
       <div style={{ width: 3, height: 36, borderRadius: 2, background: pc.bar, flexShrink: 0 }} />
-
-      {/* ⭐ Edit + Delete buttons (only for own tasks) */}
       {canManage && (
         <>
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(t); }}
-            title="Edit task"
-            style={{ width: 30, height: 30, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}
+          <button onClick={(e) => { e.stopPropagation(); onEdit(t); }} title="Edit task" style={{ width: 30, height: 30, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}
             onMouseEnter={e => { e.currentTarget.style.background = "#dbeafe"; e.currentTarget.style.transform = "scale(1.05)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "#eff6ff"; e.currentTarget.style.transform = "scale(1)"; }}
-          >
+            onMouseLeave={e => { e.currentTarget.style.background = "#eff6ff"; e.currentTarget.style.transform = "scale(1)"; }}>
             <Ico d={I.pencil} size={13} stroke="#2563eb" sw={2.2} />
           </button>
-
           {canDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(t); }}
-              title="Delete task"
-              style={{ width: 30, height: 30, borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}
+            <button onClick={(e) => { e.stopPropagation(); onDelete(t); }} title="Delete task" style={{ width: 30, height: 30, borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.background = "#fee2e2"; e.currentTarget.style.transform = "scale(1.05)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.transform = "scale(1)"; }}
-            >
+              onMouseLeave={e => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.transform = "scale(1)"; }}>
               <Ico d={I.trash} size={13} stroke="#dc2626" sw={2.2} />
             </button>
           )}
         </>
       )}
-
       <button onClick={(e) => { e.stopPropagation(); onOpen(t.id); }} title="View details" style={{ width: 30, height: 30, borderRadius: 8, background: "#f9fafb", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
         <Ico d={I.eye} size={13} stroke="#6b7280" />
       </button>
@@ -843,56 +800,35 @@ function KanbanCard({ t, onToggle, onOpen, onEdit, onDelete, completedIds, onDra
       onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = done ? "#dcfce7" : canManage ? "#c4b5fd" : "#f1f5f9"; e.currentTarget.style.transform = "scale(1)"; }}
     >
       <div style={{ position: "absolute", top: 10, right: 10, opacity: 0.25 }}><Ico d={I.grip} size={12} stroke="#94a3b8" /></div>
-
-      {/* ⭐ Mine badge */}
       {canManage && (
         <div style={{ position: "absolute", top: 8, left: 12, fontSize: 9, color: "#7c3aed", background: "#f5f3ff", padding: "2px 7px", borderRadius: 8, fontWeight: 800, display: "flex", alignItems: "center", gap: 3, letterSpacing: "0.3px" }}>
-          <Ico d={I.user} size={8} stroke="#7c3aed" sw={2.8} />
-          MINE
+          <Ico d={I.user} size={8} stroke="#7c3aed" sw={2.8} /> MINE
         </div>
       )}
-
       <div style={{ height: 2, background: pc.bar, borderRadius: 1, marginTop: canManage ? 18 : 0, marginBottom: 10, opacity: 0.7 }} />
-
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
         <div onClick={(e) => { e.stopPropagation(); onToggle(t.id); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? "#22c55e" : "#d1d5db"}`, background: done ? "#22c55e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 1 }}>
           {done && <Ico d={I.check} size={10} stroke="#fff" sw={3} />}
         </div>
         <span style={{ fontSize: 13, fontWeight: 600, color: done ? "#94a3b8" : "#1e293b", lineHeight: 1.4, textDecoration: done ? "line-through" : "none", paddingRight: 12 }}>{t.title}</span>
       </div>
-
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <PBadge p={t.priority} />
         {t.due_date && <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: st === "overdue" ? "#dc2626" : "#94a3b8", fontWeight: st === "overdue" ? 700 : 400 }}><Ico d={I.calendar} size={10} stroke={st === "overdue" ? "#dc2626" : "#94a3b8"} />{new Date(t.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>}
       </div>
-
       {t.project && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 5 }}>
           <Ico d={I.folder} size={11} stroke="#94a3b8" />
           <span style={{ fontSize: 10, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.project.project_name ?? "Personal"}</span>
         </div>
       )}
-
-      {/* ⭐ Edit + Delete on card (only for own tasks) */}
       {canManage && (
-        <div
-          className="card-actions"
-          onClick={(e) => e.stopPropagation()}
-          style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #e5e7eb", display: "flex", gap: 6 }}
-        >
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(t); }}
-            title="Edit"
-            style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#2563eb", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-          >
+        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #e5e7eb", display: "flex", gap: 6 }}>
+          <button onClick={(e) => { e.stopPropagation(); onEdit(t); }} title="Edit" style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#2563eb", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
             <Ico d={I.pencil} size={11} stroke="#2563eb" sw={2.4} /> Edit
           </button>
           {canDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(t); }}
-              title="Delete"
-              style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-            >
+            <button onClick={(e) => { e.stopPropagation(); onDelete(t); }} title="Delete" style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
               <Ico d={I.trash} size={11} stroke="#dc2626" sw={2.4} /> Delete
             </button>
           )}
@@ -907,7 +843,6 @@ function KanbanCol({ status, tasks, onToggle, onOpen, onEdit, onDelete, currentU
   const cfg = STATUS_CFG[statusKey(status)];
   const isOver = dragOverCol === status;
   const isOverdueCol = status === "overdue";
-
   const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -945,25 +880,11 @@ function KanbanCol({ status, tasks, onToggle, onOpen, onEdit, onDelete, currentU
         ) : (
           <>
             {visibleTasks.map(t => (
-              <KanbanCard
-                key={t.id}
-                t={t}
-                onToggle={onToggle}
-                onOpen={onOpen}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                currentUserId={currentUserId}
-                completedIds={completedIds}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                isDragging={draggingId === t.id}
-                updating={updatingId === t.id}
-              />
+              <KanbanCard key={t.id} t={t} onToggle={onToggle} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} currentUserId={currentUserId} completedIds={completedIds} onDragStart={onDragStart} onDragEnd={onDragEnd} isDragging={draggingId === t.id} updating={updatingId === t.id} />
             ))}
             {hasMore && (
               <button onClick={() => setVisibleCount(c => Math.min(c + PAGE_SIZE, tasks.length))} style={{ padding: "8px 12px", background: "#fff", border: `1px dashed ${cfg.col}66`, borderRadius: 10, fontSize: 11, fontWeight: 700, color: cfg.col, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <Ico d={I.chevDown} size={12} stroke={cfg.col} sw={2.5} />
-                Load {Math.min(PAGE_SIZE, tasks.length - visibleCount)} more
+                <Ico d={I.chevDown} size={12} stroke={cfg.col} sw={2.5} /> Load {Math.min(PAGE_SIZE, tasks.length - visibleCount)} more
               </button>
             )}
           </>
@@ -973,7 +894,7 @@ function KanbanCol({ status, tasks, onToggle, onOpen, onEdit, onDelete, currentU
   );
 }
 
-// ─── Task Detail Drawer ────────────────────────────────────────────────
+// ─── Meta Row ─────────────────────────────────────────────────────────
 function MetaRow({ icon, label, value, danger }) {
   return (
     <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
@@ -985,6 +906,7 @@ function MetaRow({ icon, label, value, danger }) {
   );
 }
 
+// ─── Task Detail Drawer ────────────────────────────────────────────────
 function TaskDetailDrawer({ task, loading, onClose, onStatusChange, onEdit, onDelete, currentUserId }) {
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -1020,29 +942,18 @@ function TaskDetailDrawer({ task, loading, onClose, onStatusChange, onEdit, onDe
               )}
             </div>
           </div>
-
-          {/* ⭐ Edit + Delete in drawer */}
           {canManage && (
             <>
-              <button
-                onClick={() => onEdit(task)}
-                title="Edit task"
-                style={{ width: 32, height: 32, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-              >
+              <button onClick={() => onEdit(task)} title="Edit task" style={{ width: 32, height: 32, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                 <Ico d={I.pencil} size={14} stroke="#2563eb" sw={2.2} />
               </button>
               {canDelete && (
-                <button
-                  onClick={() => onDelete(task)}
-                  title="Delete task"
-                  style={{ width: 32, height: 32, borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                >
+                <button onClick={() => onDelete(task)} title="Delete task" style={{ width: 32, height: 32, borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                   <Ico d={I.trash} size={14} stroke="#dc2626" sw={2.2} />
                 </button>
               )}
             </>
           )}
-
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Ico d={I.x} size={15} stroke="#6b7280" /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "22px" }}>
@@ -1162,16 +1073,7 @@ function ProjectGroup({ proj, tasks, onToggle, onOpen, onEdit, onDelete, current
         </div>
       </div>
       {visibleTasks.map((t) => (
-        <TaskRow
-          key={t.id}
-          t={t}
-          isDone={completedIds.has(t.id)}
-          onToggle={onToggle}
-          onOpen={onOpen}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          currentUserId={currentUserId}
-        />
+        <TaskRow key={t.id} t={t} isDone={completedIds.has(t.id)} onToggle={onToggle} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} currentUserId={currentUserId} />
       ))}
       {hasMore && (
         <button onClick={() => setVisibleCount(c => Math.min(c + PAGE_SIZE, tasks.length))} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px 16px", background: "#fff", border: "none", borderTop: "1px dashed #e5e7eb", fontSize: 11.5, fontWeight: 700, color: "#f97316", cursor: "pointer" }}>
@@ -1197,15 +1099,12 @@ export default function TasksPage() {
   const [availableProjects, setAvailableProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
-  // ⭐ Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [deleteTask, setDeleteTask] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const [successToast, setSuccessToast] = useState(null);
-
-  // ⭐ Current user (from localStorage)
   const [currentUserId, setCurrentUserId] = useState(null);
 
   const [draggingTask, setDraggingTask] = useState(null);
@@ -1218,7 +1117,6 @@ export default function TasksPage() {
   const [statusModal, setStatusModal] = useState({ isOpen: false, task: null, currentStatus: null, newStatus: null });
   const [statusSubmitting, setStatusSubmitting] = useState(false);
 
-  // ⭐ Load user on mount
   useEffect(() => {
     const user = getCurrentUser();
     if (user) setCurrentUserId(user.id);
@@ -1227,7 +1125,7 @@ export default function TasksPage() {
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/api/employee/tasks`, { headers: HEADERS() });
+      const res = await fetch(`${BASE}/api/employee/tasks`, { headers: HEADERS() });
       const json = await res.json();
       let tasks = [];
       if (json.success && Array.isArray(json.data)) tasks = json.data;
@@ -1262,27 +1160,61 @@ export default function TasksPage() {
 
   const toggle = (id) => setCompletedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // ⭐ Status modal
   const openStatusModal = (task, newStatus) => {
     const currentStatus = resolveMyStatus(task);
     if (currentStatus === newStatus) return;
     setStatusModal({ isOpen: true, task, currentStatus, newStatus });
   };
 
-  const confirmStatusChange = async (notes) => {
+  // ⭐═══════════════════════════════════════════════════════════════════════
+  // ⭐ CONFIRM STATUS CHANGE — sends FormData when attachment present
+  // ⭐═══════════════════════════════════════════════════════════════════════
+  const confirmStatusChange = async (notes, attachmentFile) => {
     const { task, newStatus } = statusModal;
     if (!task) return;
     setStatusSubmitting(true);
     setUpdatingId(task.id);
+
     const prevMyStatus = task.my_status;
     const prevStatus = task.status;
 
+    // Optimistic UI
     setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, my_status: newStatus, my_completed_at: newStatus === "completed" ? new Date().toISOString() : null } : t));
     setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, my_status: newStatus, my_completed_at: newStatus === "completed" ? new Date().toISOString() : null } : prev);
 
     try {
-      const res = await fetch(`${BASE}/api/employee/tasks/${task.id}/status`, { method: "PUT", headers: HEADERS(), body: JSON.stringify({ status: newStatus, notes }) });
-      if (!res.ok) throw new Error("Failed to update status");
+      let res;
+
+      if (attachmentFile) {
+        // ⭐ Multipart form-data path
+        const fd = new FormData();
+        fd.append("status", newStatus);
+        if (notes) fd.append("notes", notes);
+        fd.append("attachment", attachmentFile);
+
+        // ⚠️ Use POST + _method=PUT for reliable multipart handling
+        fd.append("_method", "PUT");
+
+        res = await fetch(`${BASE}/api/employee/tasks/${task.id}/status`, {
+          method: "POST",
+          headers: HEADERS_MULTIPART(),
+          body: fd,
+        });
+      } else {
+        // ⭐ JSON path (no file)
+        res = await fetch(`${BASE}/api/employee/tasks/${task.id}/status`, {
+          method: "PUT",
+          headers: HEADERS(),
+          body: JSON.stringify({ status: newStatus, notes }),
+        });
+      }
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to update status");
+      }
+
       setStatusModal({ isOpen: false, task: null, currentStatus: null, newStatus: null });
       await fetchTasks();
       if (detailTask?.id === task.id) {
@@ -1290,11 +1222,13 @@ export default function TasksPage() {
         const freshJson = await freshRes.json();
         if (freshJson.success && freshJson.data) setDetailTask(freshJson.data);
       }
+      setSuccessToast(attachmentFile ? "Status updated with attachment!" : "Status updated!");
+      setTimeout(() => setSuccessToast(null), 3000);
     } catch (e) {
       console.error(e);
       setAllTasks(prev => prev.map(t => t.id === task.id ? { ...t, my_status: prevMyStatus, status: prevStatus } : t));
       setDetailTask(prev => (prev && prev.id === task.id) ? { ...prev, my_status: prevMyStatus, status: prevStatus } : prev);
-      alert("Couldn't update task status. Please try again.");
+      alert(e.message || "Couldn't update task status. Please try again.");
     } finally {
       setUpdatingId(null);
       setStatusSubmitting(false);
@@ -1328,26 +1262,22 @@ export default function TasksPage() {
     setDraggingTask(null);
   };
 
-  // ⭐ Add success handler
   const handleTaskCreated = (data, msg) => {
     fetchTasks();
     setSuccessToast(msg || "Task created successfully!");
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
-  // ⭐ Edit handler — opens modal in edit mode
   const handleEditClick = (task) => {
-    setDetailTask(null); // close drawer
+    setDetailTask(null);
     setEditingTask(task);
   };
 
-  // ⭐ Delete handler — opens confirm
   const handleDeleteClick = (task) => {
-    setDetailTask(null); // close drawer
+    setDetailTask(null);
     setDeleteTask(task);
   };
 
-  // ⭐ Confirm delete
   const confirmDelete = async () => {
     if (!deleteTask) return;
     setDeleting(true);
@@ -1377,9 +1307,9 @@ export default function TasksPage() {
   const byStatus = STATUSES.reduce((acc, s) => { acc[s] = filtered.filter(t => resolveMyStatus(t) === s); return acc; }, {});
 
   const stats = {
-    total:  allTasks.length,
-    done:   allTasks.filter(t => resolveMyStatus(t) === "completed").length,
-    high:   allTasks.filter(t => priorityKey(t.priority) === "high").length,
+    total: allTasks.length,
+    done: allTasks.filter(t => resolveMyStatus(t) === "completed").length,
+    high: allTasks.filter(t => priorityKey(t.priority) === "high").length,
     inprog: allTasks.filter(t => resolveMyStatus(t) === "in_progress").length,
   };
 
@@ -1397,7 +1327,6 @@ export default function TasksPage() {
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
 
-      {/* Topbar */}
       <div style={{ background: "#fff", borderBottom: "1px solid #f1f5f9", padding: "14px 28px", display: "flex", alignItems: "center", gap: 14, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={() => router.back()} style={{ display: "flex", alignItems: "center", gap: 7, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}
           onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"} onMouseLeave={e => e.currentTarget.style.background = "#f9fafb"}>
@@ -1428,12 +1357,8 @@ export default function TasksPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 10, background: "linear-gradient(135deg, #f97316, #ea580c)", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px #f9731644" }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
-          >
+          <button onClick={() => setShowAddModal(true)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 10, background: "linear-gradient(135deg, #f97316, #ea580c)", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px #f9731644" }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }} onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}>
             <Ico d={I.plus} size={14} stroke="#fff" sw={2.5} /> Add Task
           </button>
         </div>
@@ -1444,10 +1369,10 @@ export default function TasksPage() {
           <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px", padding: "0 8px 8px" }}>Projects</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {[
-              { label: "Total",    value: stats.total,  color: "#f97316" },
-              { label: "Done",     value: stats.done,   color: "#22c55e" },
-              { label: "High ⚡",  value: stats.high,   color: "#ef4444" },
-              { label: "Active",   value: stats.inprog, color: "#3b82f6" },
+              { label: "Total", value: stats.total, color: "#f97316" },
+              { label: "Done", value: stats.done, color: "#22c55e" },
+              { label: "High ⚡", value: stats.high, color: "#ef4444" },
+              { label: "Active", value: stats.inprog, color: "#3b82f6" },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9" }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color }}>{value}</div>
@@ -1486,25 +1411,7 @@ export default function TasksPage() {
           ) : view === "kanban" ? (
             <div style={{ display: "flex", gap: 14, minWidth: "max-content", paddingBottom: 20 }}>
               {STATUSES.map(s => (
-                <KanbanCol
-                  key={s}
-                  status={s}
-                  tasks={byStatus[s] ?? []}
-                  onToggle={toggle}
-                  onOpen={openTaskDetail}
-                  onEdit={handleEditClick}
-                  onDelete={handleDeleteClick}
-                  currentUserId={currentUserId}
-                  completedIds={completedIds}
-                  onDrop={handleDrop}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  draggingId={draggingTask?.id}
-                  dragOverCol={dragOverCol}
-                  onDragEnter={setDragOverCol}
-                  onDragLeave={() => setDragOverCol(null)}
-                  updatingId={updatingId}
-                />
+                <KanbanCol key={s} status={s} tasks={byStatus[s] ?? []} onToggle={toggle} onOpen={openTaskDetail} onEdit={handleEditClick} onDelete={handleDeleteClick} currentUserId={currentUserId} completedIds={completedIds} onDrop={handleDrop} onDragStart={handleDragStart} onDragEnd={handleDragEnd} draggingId={draggingTask?.id} dragOverCol={dragOverCol} onDragEnter={setDragOverCol} onDragLeave={() => setDragOverCol(null)} updatingId={updatingId} />
               ))}
             </div>
           ) : (
@@ -1524,35 +1431,16 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* ⭐ Add Task Modal */}
       {showAddModal && (
-        <AddTaskModal
-          onClose={() => setShowAddModal(false)}
-          onSuccess={handleTaskCreated}
-          availableProjects={availableProjects}
-          loadingProjects={loadingProjects}
-        />
+        <AddTaskModal onClose={() => setShowAddModal(false)} onSuccess={handleTaskCreated} availableProjects={availableProjects} loadingProjects={loadingProjects} />
       )}
 
-      {/* ⭐ Edit Task Modal */}
       {editingTask && (
-        <AddTaskModal
-          editingTask={editingTask}
-          onClose={() => setEditingTask(null)}
-          onSuccess={handleTaskCreated}
-          availableProjects={availableProjects}
-          loadingProjects={loadingProjects}
-        />
+        <AddTaskModal editingTask={editingTask} onClose={() => setEditingTask(null)} onSuccess={handleTaskCreated} availableProjects={availableProjects} loadingProjects={loadingProjects} />
       )}
 
-      {/* ⭐ Delete Confirm */}
       {deleteTask && (
-        <DeleteConfirmModal
-          task={deleteTask}
-          onConfirm={confirmDelete}
-          onCancel={() => !deleting && setDeleteTask(null)}
-          deleting={deleting}
-        />
+        <DeleteConfirmModal task={deleteTask} onConfirm={confirmDelete} onCancel={() => !deleting && setDeleteTask(null)} deleting={deleting} />
       )}
 
       <StatusChangeModal
@@ -1576,14 +1464,7 @@ export default function TasksPage() {
       />
 
       {successToast && (
-        <div style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 90,
-          display: "flex", alignItems: "center", gap: 12,
-          background: "#0f172a", color: "#fff",
-          padding: "14px 18px", borderRadius: 14,
-          boxShadow: "0 20px 50px rgba(15,23,42,0.3)",
-          animation: "slideUp 0.3s ease",
-        }}>
+        <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 90, display: "flex", alignItems: "center", gap: 12, background: "#0f172a", color: "#fff", padding: "14px 18px", borderRadius: 14, boxShadow: "0 20px 50px rgba(15,23,42,0.3)", animation: "slideUp 0.3s ease" }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(34,197,94,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Ico d={I.checkCircle} size={16} stroke="#4ade80" sw={2.2} />
           </div>

@@ -104,6 +104,9 @@ const matchStatus = (task, filterKey) => {
   return st === filterKey;
 };
 
+// ⭐ Helper: check if a URL points to an image
+const isImageUrl = (url) => /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url || "");
+
 // ── Avatar ────────────────────────────────────────────────────────────
 const Avatar = ({ initials, color, size = "w-7 h-7" }) => (
   <div className={`${size} rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-white shadow-sm`} style={{ backgroundColor: color }}>
@@ -615,9 +618,11 @@ function EditTaskModal({ task, onClose, onSuccess }) {
 }
 
 // ⭐═══════════════════════════════════════════════════════════════════════════
-// ACTIVITY TIMELINE — shows all status change history
+// ACTIVITY TIMELINE — shows all status change history + ATTACHMENT PREVIEW
 // ⭐═══════════════════════════════════════════════════════════════════════════
 function ActivityTimeline({ logs, loading }) {
+  const [previewImage, setPreviewImage] = useState(null);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-3 py-6">
@@ -656,77 +661,150 @@ function ActivityTimeline({ logs, loading }) {
   };
 
   return (
-    <div className="relative pl-6">
-      <div className="absolute left-2 top-2.5 bottom-2.5 w-px bg-gray-200" />
+    <>
+      <div className="relative pl-6">
+        <div className="absolute left-2 top-2.5 bottom-2.5 w-px bg-gray-200" />
 
-      {logs.map((log, idx) => {
-        const toCfg = getCfg(log.to_status);
-        const date = log.changed_at ? new Date(log.changed_at) : null;
-        const empName = log.employee?.name || "Unknown";
-        const empInitials = empName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+        {logs.map((log, idx) => {
+          const toCfg = getCfg(log.to_status);
+          const date = log.changed_at ? new Date(log.changed_at) : null;
+          const empName = log.employee?.name || "Unknown";
+          const empInitials = empName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
-        return (
-          <div key={log.id} className={`relative ${idx === logs.length - 1 ? "" : "pb-4"}`}>
-            <div
-              className="absolute -left-[22px] top-1.5 w-4 h-4 rounded-full border-[3px] border-white"
-              style={{
-                background: toCfg.dot,
-                boxShadow: `0 0 0 1.5px ${toCfg.dot}44`,
-              }}
-            />
+          // ⭐ attachment fields
+          const attUrl = log.attachment_url || null;
+          const attIsImage = attUrl && isImageUrl(attUrl);
 
-            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                {log.from_status ? (
-                  <>
-                    <Badge status={log.from_status} />
-                    <ArrowRight size={11} className="text-gray-400" />
-                    <Badge status={log.to_status} />
-                  </>
-                ) : (
-                  <span className="text-[11px] font-bold" style={{ color: toCfg.text }}>
-                    Assigned as <strong>{toCfg.label}</strong>
-                  </span>
-                )}
-              </div>
+          return (
+            <div key={log.id} className={`relative ${idx === logs.length - 1 ? "" : "pb-4"}`}>
+              <div
+                className="absolute -left-[22px] top-1.5 w-4 h-4 rounded-full border-[3px] border-white"
+                style={{
+                  background: toCfg.dot,
+                  boxShadow: `0 0 0 1.5px ${toCfg.dot}44`,
+                }}
+              />
 
-              {log.notes && (
-                <div className="text-xs text-gray-700 leading-relaxed bg-white px-3 py-2 rounded-lg border border-gray-200 mb-2 whitespace-pre-wrap">
-                  <div className="flex items-start gap-1.5">
-                    <MessageSquare size={11} className="text-gray-400 mt-0.5 shrink-0" />
-                    <span>{log.notes}</span>
-                  </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  {log.from_status ? (
+                    <>
+                      <Badge status={log.from_status} />
+                      <ArrowRight size={11} className="text-gray-400" />
+                      <Badge status={log.to_status} />
+                    </>
+                  ) : (
+                    <span className="text-[11px] font-bold" style={{ color: toCfg.text }}>
+                      Assigned as <strong>{toCfg.label}</strong>
+                    </span>
+                  )}
                 </div>
-              )}
 
-              <div className="flex items-center gap-3 text-[10px] text-gray-400 font-medium flex-wrap">
-                {log.employee && (
-                  <span className="flex items-center gap-1.5">
-                    <div
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[7px] font-bold ring-1 ring-white shrink-0"
-                      style={{ background: getColor(log.employee.id || 0) }}
-                    >
-                      {empInitials}
+                {log.notes && (
+                  <div className="text-xs text-gray-700 leading-relaxed bg-white px-3 py-2 rounded-lg border border-gray-200 mb-2 whitespace-pre-wrap">
+                    <div className="flex items-start gap-1.5">
+                      <MessageSquare size={11} className="text-gray-400 mt-0.5 shrink-0" />
+                      <span>{log.notes}</span>
                     </div>
-                    <span className="font-semibold text-gray-500">{empName}</span>
-                    {log.employee.employee_id && (
-                      <span className="font-mono text-gray-400">{log.employee.employee_id}</span>
+                  </div>
+                )}
+
+                {/* ⭐═══════ ATTACHMENT PREVIEW ═══════ */}
+                {attUrl && (
+                  <div className="mb-2">
+                    {attIsImage ? (
+                      <div
+                        onClick={() => setPreviewImage(attUrl)}
+                        className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-900 cursor-pointer max-h-40"
+                      >
+                        <img
+                          src={attUrl}
+                          alt="attachment"
+                          className="w-full max-h-40 object-cover block transition-transform group-hover:scale-[1.02]"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                            <Eye size={12} className="text-white" />
+                            <span className="text-[10px] font-bold text-white">View full size</span>
+                          </div>
+                        </div>
+                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1">
+                          <Paperclip size={10} className="text-white" />
+                          <span className="text-[9px] font-bold text-white">Image</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <a
+                        href={attUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 p-2.5 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50/40 transition-colors group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                          <FileText size={15} className="text-rose-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-gray-800">Attachment</p>
+                          <p className="text-[10px] text-gray-400">Click to open in new tab</p>
+                        </div>
+                        <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0">
+                          <ArrowRight size={12} className="text-gray-500 group-hover:text-orange-600" />
+                        </div>
+                      </a>
                     )}
-                  </span>
+                  </div>
                 )}
-                {date && (
-                  <span className="flex items-center gap-1.5">
-                    <Clock size={10} className="text-gray-400" />
-                    {date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ·{" "}
-                    {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
+
+                <div className="flex items-center gap-3 text-[10px] text-gray-400 font-medium flex-wrap">
+                  {log.employee && (
+                    <span className="flex items-center gap-1.5">
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[7px] font-bold ring-1 ring-white shrink-0"
+                        style={{ background: getColor(log.employee.id || 0) }}
+                      >
+                        {empInitials}
+                      </div>
+                      <span className="font-semibold text-gray-500">{empName}</span>
+                      {log.employee.employee_id && (
+                        <span className="font-mono text-gray-400">{log.employee.employee_id}</span>
+                      )}
+                    </span>
+                  )}
+                  {date && (
+                    <span className="flex items-center gap-1.5">
+                      <Clock size={10} className="text-gray-400" />
+                      {date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ·{" "}
+                      {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/* ⭐ Full-screen image preview modal */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-5 right-5 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={previewImage}
+            alt="preview"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-[92%] max-h-[88vh] rounded-2xl shadow-2xl shadow-black/60"
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2110,7 +2188,7 @@ function AddTaskModal({ onClose, onSuccess }) {
   const [inlineError, setInlineError] = useState(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [projectSuccessMsg, setProjectSuccessMsg] = useState(null);
-  const [expandedIndex, setExpandedIndex] = useState(0); // which task is expanded
+  const [expandedIndex, setExpandedIndex] = useState(0);
 
   useEffect(() => { fetchProjects(); }, []);
 
@@ -2150,7 +2228,7 @@ function AddTaskModal({ onClose, onSuccess }) {
   };
 
   const removeTaskRow = (idx) => {
-    if (tasks.length === 1) return; // keep at least one
+    if (tasks.length === 1) return;
     setTasks(prev => prev.filter((_, i) => i !== idx));
     if (expandedIndex >= idx && expandedIndex > 0) setExpandedIndex(expandedIndex - 1);
   };
@@ -2177,7 +2255,6 @@ function AddTaskModal({ onClose, onSuccess }) {
 
     if (!projectId) { setInlineError("Please select a project."); return; }
 
-    // Validate all rows
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
       if (!t.title.trim()) { setInlineError(`Task #${i + 1}: Title is required.`); setExpandedIndex(i); return; }
@@ -2200,7 +2277,6 @@ function AddTaskModal({ onClose, onSuccess }) {
         })),
       };
 
-      // Use bulk endpoint if multiple, else single
       const endpoint = tasks.length > 1 ? "/api/admin/tasks/bulk" : "/api/admin/tasks";
 
       let body;
@@ -2249,7 +2325,6 @@ function AddTaskModal({ onClose, onSuccess }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/45 backdrop-blur-sm p-4">
         <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/50 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
 
-          {/* Header */}
           <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100 bg-gradient-to-br from-orange-50/60 to-transparent shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200 shrink-0">
@@ -2281,7 +2356,6 @@ function AddTaskModal({ onClose, onSuccess }) {
 
           <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
 
-            {/* Project selector (shared across all tasks) */}
             <div>
               <label className={labelCls}><Briefcase size={11} className="text-gray-400" /> Project <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
@@ -2307,7 +2381,6 @@ function AddTaskModal({ onClose, onSuccess }) {
               {apiErrors.project_id && <p className="text-red-500 text-xs mt-1">{apiErrors.project_id[0]}</p>}
             </div>
 
-            {/* Tasks list */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className={labelCls}>
@@ -2333,7 +2406,6 @@ function AddTaskModal({ onClose, onSuccess }) {
                         : "border-gray-100"
                     }`}>
 
-                    {/* Collapsed header */}
                     <div
                       className="flex items-center gap-3 px-4 py-3 cursor-pointer"
                       onClick={() => setExpandedIndex(isExpanded ? -1 : idx)}
@@ -2384,7 +2456,6 @@ function AddTaskModal({ onClose, onSuccess }) {
                       </div>
                     </div>
 
-                    {/* Expanded fields */}
                     {isExpanded && (
                       <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100">
                         <div>
@@ -2475,7 +2546,6 @@ function AddTaskModal({ onClose, onSuccess }) {
               </button>
             </div>
 
-            {/* Footer buttons */}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -2650,7 +2720,6 @@ function normalizeProject(p, index, taskArray) {
     }
   }
 
-  // ⭐ NEW: extract project manager & team lead names
   const getPersonName = (person) => {
     if (!person) return null;
     if (typeof person === "string") return person;
@@ -2675,7 +2744,6 @@ function normalizeProject(p, index, taskArray) {
     deadline,
     value,
     lead,
-    // ⭐ NEW: show on card
     projectManagerName,
     teamLeaderName,
     pct,
@@ -2797,7 +2865,6 @@ export default function TasksPage() {
     }
   };
 
-  // ⭐ FIX: prioritize filter first, then compute status counts from priority-filtered items
   const priorityFilteredItems = (selected?.items || [])
     .filter(t => t.tag.toLowerCase() === priority.toLowerCase());
 
@@ -2807,7 +2874,6 @@ export default function TasksPage() {
 
   const displayItems = filteredItems;
 
-  // ⭐ FIX: status counts now respect priority filter
   const statusCounts = priorityFilteredItems.reduce((acc, t) => {
     const st = (t.status || "").toLowerCase();
     if (isTaskOverdue(t.raw)) acc.overdue = (acc.overdue || 0) + 1;
@@ -2888,7 +2954,6 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {/* ⭐ NEW: Project Manager & Team Lead */}
                 <div className="space-y-1.5 mb-3">
                   {p.projectManagerName && (
                     <div className="flex items-center gap-1.5 text-[10px]">
@@ -3013,7 +3078,6 @@ export default function TasksPage() {
                     <span className="text-xs text-gray-400">{selected.code}</span>
                   </div>
 
-                  {/* ⭐ NEW: Manager & Lead in summary panel */}
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     {selected.projectManagerName && (
                       <div className="flex items-center gap-1.5 bg-white rounded-xl px-2.5 py-1.5 ring-1 ring-gray-100">
