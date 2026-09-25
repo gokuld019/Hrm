@@ -249,10 +249,6 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
                 <Ico d={I.folder} size={11} stroke="#6b7280" sw={2.2} /> Project
-                <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional)</span>
-
-          
-
               </label>
               {loadingProjects ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: "#f9fafb", borderRadius: 12, border: "1px solid #e5e7eb" }}>
@@ -260,12 +256,8 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
                 </div>
               ) : (
                 <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={submitting} style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
-
-                  {availableProjects.map(p => (<option key={p.id} value={p.id}>📁 {p.project_name} ({p.project_code})</option>))}
-
                   <option value="" disabled>Select Project</option>
-  {availableProjects.map(p => (<option key={p.id} value={p.id}>📁 {p.project_name} ({p.project_code})</option>))}
-
+                  {availableProjects.map(p => (<option key={p.id} value={p.id}>📁 {p.project_name} ({p.project_code})</option>))}
                 </select>
               )}
             </div>
@@ -295,10 +287,7 @@ function AddTaskModal({ onClose, onSuccess, availableProjects, loadingProjects, 
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
               <Ico d={I.messageSquare} size={11} stroke="#6b7280" sw={2.2} /> Description
-
               <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 10.5 }}>(optional)</span>
-
-
             </label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} disabled={submitting} placeholder="Add more details…" rows={3} maxLength={1000} style={{ width: "100%", padding: "11px 14px", borderRadius: 12, fontSize: 13, border: "1.5px solid #e5e7eb", background: "#fff", color: "#1e293b", outline: "none", fontFamily: "inherit", resize: "vertical", minHeight: 80, maxHeight: 180, boxSizing: "border-box" }}
               onFocus={e => e.currentTarget.style.borderColor = "#f97316"} onBlur={e => e.currentTarget.style.borderColor = "#e5e7eb"} />
