@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.pencilkraft.in";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.crazystory.in";
 
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 

@@ -41,7 +41,7 @@ import ProductivityPage from "../Productivity/page";
 import TicketsPage     from "../Tickets/page";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.pencilkraft.in";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.crazystory.in";
 
 // ─── ProtectedRoute ───────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requiredRole }) {

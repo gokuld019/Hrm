@@ -1104,9 +1104,6 @@ const navigate = (pg) => {
         )}
       </div>
 
-      <div style={{ textAlign:"center", fontSize:11, color:"#94a3b8", paddingTop:4 }}>
-        2014–2026 © SmartHR &nbsp;·&nbsp; Designed &amp; Developed By <span style={{ color:"#f97316", fontWeight:600 }}>Dreamo</span>
-      </div>
     </div>
   );
 
